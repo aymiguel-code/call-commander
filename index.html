@@ -1,1641 +1,458 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CALL COMMANDER — Primerica</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-:root{
-  --bg:#080d1a;--surface:#111827;--surface2:#1a2234;--border:#1e2d4a;
-  --green:#00d46a;--green-dim:#00a854;--orange:#ff6b35;--red:#ff4757;
-  --blue:#3b82f6;--yellow:#fbbf24;
-  --text:#e2e8f0;--text-dim:#94a3b8;--text-muted:#475569;
+/**
+ * ╔══════════════════════════════════════════════════════════════════╗
+ * ║         CALL COMMANDER — Google Apps Script Web App             ║
+ * ║         Miguel Romero · Primerica Independent Representative    ║
+ * ╚══════════════════════════════════════════════════════════════════╝
+ *
+ * INSTRUCCIONES DE DESPLIEGUE (una sola vez):
+ * ─────────────────────────────────────────────
+ * 1. Abre tu Google Sheet:
+ *    https://docs.google.com/spreadsheets/d/1T_NkUSlIWLnNJ8CnTEnqog52bYmmuo2eZeqqP4xri1A/edit
+ *
+ * 2. Ve a: Extensiones → Apps Script
+ *
+ * 3. Borra el código de ejemplo y pega TODO este archivo.
+ *
+ * 4. Haz clic en: Implementar → Nueva implementación
+ *    - Tipo: App web
+ *    - Ejecutar como: Yo (tu cuenta de Google)
+ *    - Quién puede acceder: Cualquier persona (Anyone)
+ *
+ * 5. Haz clic en "Implementar" y acepta los permisos.
+ *
+ * 6. Copia la URL generada (termina en /exec).
+ *
+ * 7. En Call Commander → ⚙️ → pega la URL → Guardar → Probar.
+ *
+ * NOTA: La hoja "Llamadas" y "Prospectos" se crean automáticamente
+ * si no existen. Si ya tienes datos en la primera hoja, se usan como
+ * fuente para "Cargar desde Sheets".
+ */
+
+// ===== CONFIGURACIÓN =====
+const SPREADSHEET_ID    = '1T_NkUSlIWLnNJ8CnTEnqog52bYmmuo2eZeqqP4xri1A';
+const SHEET_LLAMADAS    = 'Llamadas';
+const SHEET_PROSPECTOS  = 'Prospectos';
+const SHEET_SEGUIMIENTO = '📋 SEGUIMIENTO'; // CRM principal de Miguel (65 contactos activos)
+const SHEET_DIRECTORIO  = '📞 DIRECTORIO';  // Directorio crudos de contactos
+
+// ===== MAPA DE NORMALIZACIÓN DE COLUMNAS =====
+// Traduce nombres de columna de cualquier hoja al formato estándar de Call Commander.
+//
+// Fuentes soportadas:
+//   - Tab "Prospectos"   : columnas en Title Case (ID, Nombre, Teléfono, Tipo...)
+//   - Tab "📋 SEGUIMIENTO": columnas en MAYÚSCULAS con emoji (NOMBRE, ESTRATEGIA, ETAPA DEL EMBUDO...)
+//   - Tab "📞 DIRECTORIO" : columnas en MAYÚSCULAS (NOMBRE, TELÉFONO, FUENTE / GRUPO, NOTAS)
+const COLUMN_MAP = {
+  // Nombre
+  'NOMBRE':                   'Nombre',
+  'NOMBRE COMPLETO':          'Nombre',
+
+  // Teléfono
+  'TELÉFONO':                 'Teléfono',
+  'TELEFONO':                 'Teléfono',
+  'CELULAR':                  'Teléfono',
+  'PHONE':                    'Teléfono',
+
+  // Tipo de contacto — SEGUIMIENTO usa ESTRATEGIA (Vida/Reclutamiento), DIRECTORIO usa FUENTE / GRUPO
+  'ESTRATEGIA':               'Tipo',        // SEGUIMIENTO: Vida | Reclutamiento
+  'FUENTE / GRUPO':           'Tipo',        // DIRECTORIO: Propios | Lyft | Diego Vega | ...
+  'GRUPO':                    'Tipo',
+  'TIPO':                     'Tipo',
+
+  // Fuente de origen (solo SEGUIMIENTO)
+  'FUENTE':                   'Fuente',      // Propios | Keyla R | Fabian T | etc.
+
+  // Estado y etapa del embudo (SEGUIMIENTO)
+  'ETAPA DEL EMBUDO':         'Etapa',       // Primera Llamada | Seguimiento Post-Presentación | ...
+  'ESTADO ACTUAL':            'Estado',      // Interesado | Volver a llamar | Revisando info | ...
+  'ESTADO':                   'Estado',
+  'STATUS':                   'Estado',
+
+  // Seguimiento programado
+  '⚡ PRÓXIMO SEGUIMIENTO':   'Callback',    // Fecha del próximo contacto
+  'PRÓXIMO SEGUIMIENTO':      'Callback',    // Sin emoji, por si acaso
+
+  // Score MACHOE (SEGUIMIENTO)
+  'SCORE':                    'Score',       // 0–5 puntos de calificación
+
+  // Métricas adicionales (SEGUIMIENTO)
+  '# INTENTOS':               'Intentos',
+  'ASIGNADO A':               'AsignadoA',
+  'PÓLIZA':                   'Poliza',
+
+  // Notas y referidos
+  'NOTAS':                    'Notas',
+  'NOTA':                     'Notas',
+  'REFERIDO POR':             'Referido Por',
+  'REFERIDO':                 'Referido Por',
+
+  // Comunes
+  'ID':                       'ID',
+  'PRIORIDAD':                'Prioridad'
+};
+
+function normalizeCol(raw) {
+  const upper = (raw || '').toString().trim().toUpperCase();
+  return COLUMN_MAP[upper] || raw;
 }
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;}
 
-/* NAV */
-.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
-.nav-brand{font-size:15px;font-weight:800;color:var(--green);letter-spacing:1px;}
-.nav-stats{display:flex;gap:20px;align-items:center;}
-.stat-badge{display:flex;flex-direction:column;align-items:center;gap:1px;}
-.stat-badge .val{font-size:18px;font-weight:800;color:var(--green);}
-.stat-badge .lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;}
+// ===== MANEJADOR GET (lectura) =====
+// Soporta JSONP: si se envía ?callback=nombreFuncion, la respuesta se envuelve
+// en nombreFuncion(json) para eludir la restricción CORS en navegadores web.
+function doGet(e) {
+  try {
+    const action   = (e.parameter && e.parameter.action)   || 'ping';
+    const callback = (e.parameter && e.parameter.callback) || null;
 
-/* SCREENS */
-.screen{display:none;min-height:calc(100vh - 53px);}
-.screen.active{display:block;}
+    let data;
+    if (action === 'ping') {
+      data = { success: true, message: 'Call Commander conectado correctamente ✅' };
+    } else if (action === 'getProspectos') {
+      data = getProspectosData();
+    } else if (action === 'getCallbacks') {
+      data = getCallbacksData();
+    } else if (action === 'logCall') {
+      // Escritura vía GET+JSONP — evita el problema del redirect que pierde el body en POST
+      data = logCallFromParams(e.parameter);
+    } else {
+      data = { success: true, message: 'API activa.', acciones: ['ping','getProspectos','getCallbacks','logCall'] };
+    }
 
-/* BUTTONS */
-.btn{padding:11px 22px;border-radius:9px;border:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .18s;letter-spacing:.3px;}
-.btn-primary{background:var(--green);color:#000;}
-.btn-primary:hover{background:#00f07a;transform:translateY(-1px);}
-.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
-.btn-secondary:hover{border-color:var(--text-dim);}
-.btn-orange{background:var(--orange);color:#fff;}
-.btn-red{background:var(--red);color:#fff;}
-.btn-lg{padding:16px 36px;font-size:16px;border-radius:11px;}
-.btn-sm{padding:7px 14px;font-size:12px;border-radius:7px;}
+    return makeResponse(data, callback);
 
-/* PAGE HEADER */
-.page-header{padding:28px 24px 0;text-align:center;}
-.page-header h2{font-size:22px;font-weight:800;}
-.page-header p{color:var(--text-dim);margin-top:6px;font-size:14px;}
-
-/* HOME */
-.home{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 24px;gap:36px;min-height:calc(100vh - 53px);}
-.home-title h1{font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--green),#00b4d8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;}
-.home-title p{color:var(--text-dim);text-align:center;margin-top:6px;}
-
-/* GOALS GRID */
-.goals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.goal-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}
-.goal-card .g-val{font-size:26px;font-weight:900;color:var(--green);}
-.goal-card .g-target{font-size:11px;color:var(--text-muted);}
-.goal-card .g-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:3px;}
-
-/* TYPE GRID */
-.type-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;max-width:900px;margin:0 auto;padding:32px 24px;}
-.type-card{background:var(--surface);border:2px solid var(--border);border-radius:13px;padding:22px;cursor:pointer;transition:all .18s;text-align:center;}
-.type-card:hover{border-color:var(--green);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,212,106,.15);}
-.type-card .tc-emoji{font-size:34px;margin-bottom:10px;}
-.type-card .tc-name{font-size:14px;font-weight:700;}
-.type-card .tc-desc{font-size:11px;color:var(--text-dim);margin-top:5px;}
-
-/* GUIDANCE */
-.guidance-options{display:flex;flex-direction:column;gap:12px;max-width:600px;margin:0 auto;padding:24px;}
-.guidance-card{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:18px;cursor:pointer;transition:all .18s;}
-.guidance-card:hover{border-color:var(--blue);}
-.guidance-card h4{font-size:15px;font-weight:700;margin-bottom:6px;}
-.guidance-card p{font-size:12px;color:var(--text-dim);line-height:1.6;}
-.msg-template{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;font-size:12px;color:var(--text-dim);line-height:1.7;font-style:italic;}
-
-/* SCRIPT OPTIONS */
-.script-option{background:var(--surface);border:2px solid var(--border);border-radius:11px;padding:18px;cursor:pointer;transition:all .18s;margin-bottom:10px;}
-.script-option:hover{border-color:var(--green);transform:translateX(4px);}
-.script-option .s-name{font-size:15px;font-weight:700;}
-.script-option .s-desc{font-size:12px;color:var(--text-dim);margin-top:4px;}
-
-/* CALL LAYOUT */
-.call-layout{display:grid;grid-template-columns:1fr 300px;min-height:calc(100vh - 53px);}
-.call-main{padding:18px;display:flex;flex-direction:column;gap:14px;}
-.call-sidebar{background:var(--surface);border-left:1px solid var(--border);padding:18px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
-
-/* PROSPECT BAR */
-.prospect-bar{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:13px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.prospect-name-input{background:transparent;border:none;color:var(--text);font-size:17px;font-weight:700;flex:1;outline:none;min-width:140px;}
-.prospect-name-input::placeholder{color:var(--text-muted);}
-
-/* SCRIPT VIEWER */
-.script-viewer{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:13px;overflow:hidden;display:flex;flex-direction:column;}
-.steps-nav{background:var(--surface2);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;gap:6px;flex-wrap:wrap;}
-.step-pill{padding:5px 10px;border-radius:18px;font-size:10px;font-weight:700;cursor:pointer;background:var(--surface);color:var(--text-muted);border:1px solid var(--border);transition:all .15s;text-transform:uppercase;letter-spacing:.4px;}
-.step-pill.active{background:var(--green);color:#000;border-color:var(--green);}
-.step-pill.done{color:var(--green-dim);border-color:var(--green-dim);background:transparent;}
-.script-content{padding:26px;flex:1;overflow-y:auto;}
-.step-label{font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px;}
-.step-text{font-size:19px;line-height:1.8;color:var(--text);white-space:pre-wrap;}
-.step-text .hl{color:var(--green);font-weight:700;}
-.step-text .pause{color:var(--yellow);font-style:italic;}
-.step-nav{display:flex;gap:10px;padding:14px 26px;border-top:1px solid var(--border);}
-
-/* SIDEBAR SECTIONS */
-.sidebar-section-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
-.golden-rules{font-size:12px;color:var(--text-dim);line-height:1.9;}
-.golden-rules div{margin-bottom:6px;}
-.divider{height:1px;background:var(--border);}
-.stat-row{display:flex;justify-content:space-between;font-size:13px;}
-.stat-row span:last-child{font-weight:700;}
-
-/* TAGS */
-.tag{display:inline-block;padding:3px 9px;border-radius:18px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
-.tag-green{background:rgba(0,212,106,.15);color:var(--green);}
-.tag-blue{background:rgba(59,130,246,.15);color:var(--blue);}
-.tag-orange{background:rgba(255,107,53,.15);color:var(--orange);}
-
-/* PULSE */
-.pulse-dot{width:9px;height:9px;background:var(--red);border-radius:50%;animation:pulse 1.5s infinite;flex-shrink:0;}
-@keyframes pulse{0%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(1.3);}100%{opacity:1;transform:scale(1);}}
-
-/* TIMER */
-.timer{font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
-
-/* OBJECTION PANEL */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:199;display:none;}
-.overlay.active{display:block;}
-.obj-panel{position:fixed;right:0;top:0;bottom:0;width:460px;background:var(--surface);border-left:2px solid var(--orange);z-index:200;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column;}
-.obj-panel.open{transform:translateX(0);}
-.obj-header{background:var(--orange);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;}
-.obj-header span{font-weight:800;font-size:15px;color:#fff;}
-.obj-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;}
-.obj-list{padding:18px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1;}
-.obj-item{border-radius:10px;overflow:hidden;}
-.obj-trigger-btn{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;text-align:left;color:var(--orange);font-size:13px;font-weight:600;transition:all .18s;line-height:1.4;}
-.obj-trigger-btn:hover{border-color:var(--orange);background:rgba(255,107,53,.1);}
-.obj-trigger-btn.expanded{border-radius:10px 10px 0 0;border-color:var(--orange);}
-.obj-response{background:rgba(255,107,53,.07);border:1px solid rgba(255,107,53,.3);border-top:none;border-radius:0 0 10px 10px;padding:14px;font-size:14px;line-height:1.8;color:var(--text);display:none;white-space:pre-wrap;}
-
-/* SIDEBAR OBJECTIONS */
-.sidebar-obj-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--orange);font-size:11px;cursor:pointer;text-align:left;width:100%;transition:all .18s;}
-.sidebar-obj-btn:hover{border-color:var(--orange);}
-
-/* RESULT SCREEN */
-.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;max-width:780px;margin:0 auto;padding:32px 24px;}
-.result-btn{padding:22px 14px;border-radius:12px;border:2px solid transparent;cursor:pointer;text-align:center;transition:all .18s;background:var(--surface);}
-.result-btn:hover{transform:translateY(-2px);}
-.result-emoji{font-size:26px;margin-bottom:8px;}
-.result-label{display:block;font-size:13px;font-weight:700;}
-
-/* CALLBACK FORM */
-.callback-form{max-width:420px;margin:0 auto;padding:0 24px;}
-
-/* WHATSAPP */
-.wa-container{max-width:700px;margin:0 auto;padding:32px 24px;}
-.wa-form{display:flex;flex-direction:column;gap:14px;margin-bottom:20px;}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.form-group{display:flex;flex-direction:column;gap:5px;}
-.form-label{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;}
-.form-input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;color:var(--text);font-size:14px;outline:none;transition:border-color .18s;}
-.form-input:focus{border-color:var(--green);}
-.wa-preview-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
-.wa-preview{background:#075e54;border-radius:13px;padding:22px;font-size:14px;line-height:1.9;color:#fff;white-space:pre-wrap;}
-.wa-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
-.copy-confirm{color:var(--green);font-weight:700;font-size:13px;margin-top:10px;display:none;}
-
-/* DIAGNOSTIC */
-.diag-container{max-width:780px;margin:0 auto;padding:32px 24px;}
-.diag-section{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:22px;margin-bottom:14px;}
-.diag-section h3{font-size:11px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;}
-.diag-q{font-size:15px;color:var(--text);margin-bottom:12px;line-height:1.5;}
-.diag-btns{display:flex;gap:10px;margin-bottom:8px;}
-.diag-btn{padding:9px 22px;border-radius:8px;border:2px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:700;transition:all .18s;}
-.diag-btn.yes-btn{border-color:var(--green);color:var(--green);}
-.diag-btn.yes-btn.selected{background:var(--green);color:#000;}
-.diag-btn.no-btn{border-color:var(--red);color:var(--red);}
-.diag-btn.no-btn.selected{background:var(--red);color:#fff;}
-.diag-feedback{background:var(--surface2);border-radius:9px;padding:13px;font-size:13px;color:var(--text-dim);display:none;line-height:1.7;margin-top:6px;}
-.diag-sub-btns{display:flex;flex-direction:column;gap:7px;margin-top:10px;}
-.diag-sub-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text-dim);cursor:pointer;text-align:left;font-size:12px;transition:all .18s;}
-.diag-sub-btn:hover,.diag-sub-btn.selected{border-color:var(--orange);color:var(--orange);}
-.diag-highlight{color:var(--orange);font-weight:700;}
-.decisions-section{border-color:var(--green);}
-.card-note{background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.2);border-radius:8px;padding:12px;font-size:12px;color:var(--text-dim);line-height:1.7;margin-bottom:14px;}
-
-/* PROGRESS NUMBERS */
-.prog-input{background:transparent;border:none;color:var(--green);font-size:26px;font-weight:900;text-align:center;width:70px;outline:none;}
-
-/* CARD */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:18px;}
-
-/* BUZON PANEL */
-.buzon-panel{position:fixed;right:0;top:0;bottom:0;width:460px;background:var(--surface);border-left:2px solid var(--red);z-index:200;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column;}
-.buzon-panel.open{transform:translateX(0);}
-.buzon-header{background:var(--red);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;}
-.buzon-header span{font-weight:800;font-size:15px;color:#fff;}
-.buzon-content{padding:18px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;flex:1;}
-.buzon-template{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;}
-.buzon-template-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
-.buzon-template-text{font-size:14px;color:var(--text);line-height:1.8;background:var(--surface);border-radius:8px;padding:12px;margin-bottom:10px;}
-
-/* CONFIG PANEL */
-.config-panel{position:fixed;right:0;top:0;bottom:0;width:500px;background:var(--surface);border-left:2px solid var(--blue);z-index:200;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column;}
-.config-panel.open{transform:translateX(0);}
-.config-header{background:var(--blue);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;}
-.config-header span{font-weight:800;font-size:15px;color:#fff;}
-.config-content{padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;flex:1;}
-
-/* SYNC INDICATOR */
-.sync-dot{width:8px;height:8px;border-radius:50%;background:#475569;flex-shrink:0;transition:background .4s;}
-.sync-label{font-size:10px;color:var(--text-muted);white-space:nowrap;}
-
-/* PROSPECTO CARDS */
-.prospecto-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:all .18s;}
-.prospecto-card:hover{border-color:var(--green);transform:translateX(3px);}
-.pc-name{font-size:15px;font-weight:700;margin-bottom:4px;}
-.pc-meta{font-size:11px;color:var(--text-dim);display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-.pc-estado{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
-.prospecto-add-form{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;}
-</style>
-</head>
-<body>
-
-<!-- NAV -->
-<nav class="nav">
-  <div class="nav-brand">⚡ CALL COMMANDER</div>
-  <div class="nav-stats">
-    <div class="stat-badge"><span class="val" id="nav-calls">0</span><span class="lbl">Llamadas</span></div>
-    <div class="stat-badge"><span class="val" id="nav-citas">0</span><span class="lbl">Citas</span></div>
-    <div class="stat-badge"><span class="val" id="nav-conv">0%</span><span class="lbl">Conversión</span></div>
-    <div style="display:flex;align-items:center;gap:5px;">
-      <div class="sync-dot" id="sync-dot"></div>
-      <span class="sync-label" id="sync-label">Sin conectar</span>
-    </div>
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('prospectos')">👥 Prospectos</button>
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('diagnostic')">📊 Diagnóstico</button>
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('home')">🏠 Inicio</button>
-    <button class="btn btn-sm" title="Configurar Google Sheets" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);padding:7px 10px;" onclick="openConfigPanel()">⚙️</button>
-  </div>
-</nav>
-
-<!-- OVERLAY -->
-<div class="overlay" id="overlay" onclick="closeAllPanels()"></div>
-
-<!-- OBJECTION PANEL -->
-<div class="obj-panel" id="objPanel">
-  <div class="obj-header">
-    <span>⚠️ MANEJO DE OBJECIONES</span>
-    <button class="obj-close-btn" onclick="closeObjPanel()">✕</button>
-  </div>
-  <div class="obj-list" id="objList"></div>
-</div>
-
-<!-- BUZÓN PANEL -->
-<div class="buzon-panel" id="buzonPanel">
-  <div class="buzon-header">
-    <span>❌ NO CONTESTÓ / BUZÓN</span>
-    <button class="obj-close-btn" onclick="closeBuzonPanel()">✕</button>
-  </div>
-  <div class="buzon-content">
-    <div style="font-size:12px;color:var(--text-dim);">Registrado como "No contestó". Elige la plantilla a enviar por WhatsApp/SMS:</div>
-    <div class="buzon-template">
-      <div class="buzon-template-title">PLANTILLA A — Conocidos y Referidos</div>
-      <div class="buzon-template-text" id="buzonText1"></div>
-      <button class="btn btn-sm btn-secondary" style="width:100%;" onclick="copyBuzon(1)">📋 Copiar Plantilla A</button>
-      <div class="copy-confirm" id="buzonConfirm1">✅ ¡Copiado!</div>
-    </div>
-    <div class="buzon-template">
-      <div class="buzon-template-title">PLANTILLA B — Leads y Base de Datos</div>
-      <div class="buzon-template-text" id="buzonText2"></div>
-      <button class="btn btn-sm btn-secondary" style="width:100%;" onclick="copyBuzon(2)">📋 Copiar Plantilla B</button>
-      <div class="copy-confirm" id="buzonConfirm2">✅ ¡Copiado!</div>
-    </div>
-    <button class="btn btn-primary" style="width:100%;margin-top:4px;" onclick="closeBuzonGoNext()">Siguiente llamada →</button>
-  </div>
-</div>
-
-<!-- CONFIG PANEL (Google Sheets) -->
-<div class="config-panel" id="configPanel">
-  <div class="config-header">
-    <span>⚙️ GOOGLE SHEETS — CONFIGURACIÓN</span>
-    <button class="obj-close-btn" onclick="closeConfigPanel()">✕</button>
-  </div>
-  <div class="config-content">
-    <div style="font-size:12px;color:var(--text-dim);line-height:1.8;">
-      Conecta Call Commander con tu Google Sheet para registrar llamadas, citas y prospectos automáticamente en tiempo real.
-    </div>
-    <div class="form-group">
-      <label class="form-label">URL del Web App (Google Apps Script)</label>
-      <input type="text" class="form-input" id="config-url" placeholder="https://script.google.com/macros/s/…/exec" oninput="WEBAPP_URL=this.value;">
-      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Despliega <strong>google-apps-script.js</strong> en tu Sheet y pega la URL aquí.</div>
-    </div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="saveWebAppUrl()">💾 Guardar URL</button>
-      <button class="btn btn-secondary" onclick="testConnection()">🔌 Probar</button>
-    </div>
-    <div class="copy-confirm" id="config-saved" style="display:none;">✅ ¡URL guardada en este navegador!</div>
-    <div id="test-result" style="font-size:13px;color:var(--text-dim);min-height:20px;"></div>
-    <div class="divider"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">QUÉ SE SINCRONIZA</div>
-    <div style="font-size:12px;color:var(--text-dim);line-height:2;">
-      ✅ Cada llamada registrada → hoja <strong>Llamadas</strong><br>
-      ✅ Citas agendadas con fecha, hora y link Zoom<br>
-      ✅ Callbacks con fecha programada<br>
-      ✅ No contestó / Buzón automáticamente<br>
-      ✅ Prospectos agregados manualmente → hoja <strong>Prospectos</strong><br>
-      ✅ Carga tu lista de prospectos desde Sheets
-    </div>
-    <div class="divider"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">INSTRUCCIONES DE DESPLIEGUE</div>
-    <div style="font-size:11px;color:var(--text-dim);line-height:2;">
-      1. Abre tu Google Sheet<br>
-      2. Extensiones → <strong>Apps Script</strong><br>
-      3. Pega el código de <strong>google-apps-script.js</strong><br>
-      4. Implementar → <strong>Nueva implementación</strong><br>
-      5. Tipo: App web · Ejecutar como: <strong>Yo</strong> · Acceso: <strong>Cualquier persona</strong><br>
-      6. Autoriza, copia la URL y pégala arriba
-    </div>
-  </div>
-</div>
-
-<!-- =================== SCREENS =================== -->
-
-<!-- HOME -->
-<div class="screen active" id="screen-home">
-  <div class="home">
-    <div class="home-title">
-      <h1>CALL COMMANDER</h1>
-      <p>Sistema de Ejecución de Llamadas — Miguel Romero · Primerica</p>
-    </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
-      <button class="btn btn-primary btn-lg" onclick="showScreen('type-selector')">📞 INICIAR SESIÓN DE LLAMADAS</button>
-      <button class="btn btn-secondary btn-lg" onclick="showScreen('diagnostic')">📊 DIAGNÓSTICO SEMANAL</button>
-    </div>
-    <div class="card" style="max-width:680px;width:100%;">
-      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">META MENSUAL</div>
-      <div class="goals-grid">
-        <div class="goal-card"><div class="g-val">20</div><div class="g-target">pólizas / mes</div><div class="g-label">Meta</div></div>
-        <div class="goal-card"><div class="g-val">10</div><div class="g-target">reclutas activos</div><div class="g-label">Meta</div></div>
-        <div class="goal-card"><div class="g-val">$15K+</div><div class="g-target">generados</div><div class="g-label">Meta</div></div>
-        <div class="goal-card"><div class="g-val">50–75</div><div class="g-target">llamadas / semana</div><div class="g-label">Norma</div></div>
-        <div class="goal-card"><div class="g-val">1:3–5</div><div class="g-target">llamadas → cita</div><div class="g-label">Conversión</div></div>
-        <div class="goal-card"><div class="g-val">180+</div><div class="g-target">referidos / mes</div><div class="g-label">Meta</div></div>
-      </div>
-    </div>
-    <p style="color:var(--text-muted);font-size:12px;font-style:italic;">Cada viernes mides. Cada lunes atacas. El sistema funciona si tú lo ejecutas.</p>
-  </div>
-</div>
-
-<!-- TYPE SELECTOR -->
-<div class="screen" id="screen-type-selector">
-  <div class="page-header">
-    <h2>¿A QUIÉN VAS A LLAMAR?</h2>
-    <p>Selecciona el tipo de prospecto para ver el guion correcto</p>
-  </div>
-  <div class="type-grid">
-    <div class="type-card" onclick="selectType('referido-conocido')">
-      <div class="tc-emoji">👥</div>
-      <div class="tc-name">Referido Conocido</div>
-      <div class="tc-desc">Familiar, amigo o conocido de tu lista</div>
-    </div>
-    <div class="type-card" onclick="selectType('referido-frio')">
-      <div class="tc-emoji">❄️</div>
-      <div class="tc-name">Referido Frío</div>
-      <div class="tc-desc">Recomendado por un cliente, no te conoce</div>
-    </div>
-    <div class="type-card" onclick="selectType('redes-sociales')">
-      <div class="tc-emoji">📱</div>
-      <div class="tc-name">Lead de Redes</div>
-      <div class="tc-desc">Interactuó con tu contenido Instagram/TikTok</div>
-    </div>
-    <div class="type-card" onclick="selectType('base-datos')">
-      <div class="tc-emoji">📋</div>
-      <div class="tc-name">Base de Datos</div>
-      <div class="tc-desc">Número desconocido o base externa</div>
-    </div>
-    <div class="type-card" onclick="selectType('reclutamiento')">
-      <div class="tc-emoji">💼</div>
-      <div class="tc-name">Reclutamiento</div>
-      <div class="tc-desc">Persona con perfil de líder — oportunidad de negocio</div>
-    </div>
-    <div class="type-card" onclick="selectType('frio-personal')">
-      <div class="tc-emoji">🧊</div>
-      <div class="tc-name">Contacto Frío Personal</div>
-      <div class="tc-desc">Conocido casual — tienes el número, poca relación activa</div>
-    </div>
-  </div>
-</div>
-
-<!-- CONTACT GUIDANCE -->
-<div class="screen" id="screen-guidance">
-  <div class="page-header">
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('type-selector')" style="margin-bottom:14px;">← Cambiar tipo</button>
-    <h2>¿CÓMO LO CONTACTAS?</h2>
-    <p id="guidance-subtitle"></p>
-  </div>
-  <div class="guidance-options" id="guidanceOptions"></div>
-</div>
-
-<!-- SCRIPT SELECTOR -->
-<div class="screen" id="screen-script-selector">
-  <div class="page-header">
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('type-selector')" style="margin-bottom:14px;">← Cambiar tipo</button>
-    <h2>ELIGE EL GUION</h2>
-    <p id="script-selector-sub">Selecciona el ángulo más adecuado para este prospecto</p>
-  </div>
-  <div style="max-width:620px;margin:0 auto;padding:22px;" id="scriptOptions"></div>
-</div>
-
-<!-- ACTIVE CALL -->
-<div class="screen" id="screen-call">
-  <div class="call-layout">
-    <div class="call-main">
-      <!-- Prospect bar -->
-      <div class="prospect-bar">
-        <div class="pulse-dot"></div>
-        <input type="text" class="prospect-name-input" id="prospectName" placeholder="Nombre del prospecto…" oninput="onProspectNameChange()">
-        <input type="text" id="prospectPhone" placeholder="📱 Teléfono (opcional)" style="background:transparent;border:none;border-left:1px solid var(--border);color:var(--text-dim);font-size:13px;padding:0 12px;outline:none;width:160px;font-family:inherit;">
-        <span class="timer" id="callTimer">0:00</span>
-        <button class="btn btn-sm btn-orange" onclick="openObjPanel()">⚠️ OBJECIÓN</button>
-        <button class="btn btn-sm btn-red" onclick="openBuzonPanel()">❌ No contestó / Buzón</button>
-        <button class="btn btn-sm" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);" onclick="goToResult()">Registrar resultado →</button>
-      </div>
-      <!-- Tags -->
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span class="tag tag-green" id="call-script-tag"></span>
-        <span class="tag tag-blue" id="call-type-tag"></span>
-      </div>
-      <!-- Script viewer -->
-      <div class="script-viewer">
-        <div class="steps-nav" id="stepsNav"></div>
-        <div class="script-content">
-          <div class="step-label" id="stepLabel"></div>
-          <div class="step-text" id="stepText"></div>
-        </div>
-        <div class="step-nav">
-          <button class="btn btn-secondary" onclick="prevStep()">← Anterior</button>
-          <button class="btn btn-primary" onclick="nextStep()">Siguiente paso →</button>
-        </div>
-      </div>
-    </div>
-    <!-- Sidebar -->
-    <div class="call-sidebar">
-      <div class="sidebar-section-title">📋 REGLAS DE ORO</div>
-      <div class="golden-rules">
-        <div>⚡ <strong>Urgencia:</strong> Tu postura debe ser ejecutiva — el tiempo medido bloquea preguntas.</div>
-        <div>📅 <strong>HOY o MAÑANA:</strong> Nunca agendes a más de 48 horas de distancia.</div>
-        <div>👥 <strong>WFA Obligatorio:</strong> La cita debe ser con la pareja para que tenga validez y la sesión te cuente por dos.</div>
-        <div>📞 <strong>Propósito:</strong> El teléfono es únicamente para agendar, no para presentar.</div>
-        <div>🎯 <strong>Control:</strong> Quien pregunta, controla. Nunca respondas directo; reencuadra primero.</div>
-        <div>💨 <strong>Sé como el humo:</strong> No debatas ni busques ganar el argumento, busca ganar el contrato.</div>
-        <div>🤫 <strong>Táctica "Huh?":</strong> Ante una objeción inesperada, haz una pausa de 2 segundos antes de responder para recuperar el control.</div>
-      </div>
-      <div class="divider"></div>
-      <div class="sidebar-section-title">⚠️ OBJECIONES RÁPIDAS</div>
-      <div id="sidebarObjBtns" style="display:flex;flex-direction:column;gap:7px;"></div>
-      <div class="divider"></div>
-      <div class="sidebar-section-title">📊 SESIÓN DE HOY</div>
-      <div style="display:flex;flex-direction:column;gap:7px;">
-        <div class="stat-row"><span style="color:var(--text-dim);">Llamadas</span><span id="sess-calls">0</span></div>
-        <div class="stat-row"><span style="color:var(--text-dim);">Citas agendadas</span><span style="color:var(--green);" id="sess-citas">0</span></div>
-        <div class="stat-row"><span style="color:var(--text-dim);">No interesados</span><span style="color:var(--red);" id="sess-no">0</span></div>
-        <div class="stat-row"><span style="color:var(--text-dim);">No contestaron</span><span style="color:var(--text-muted);" id="sess-nc">0</span></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- RESULT -->
-<div class="screen" id="screen-result">
-  <div class="page-header">
-    <h2>¿QUÉ PASÓ EN LA LLAMADA?</h2>
-    <p id="result-name" style="color:var(--green);font-weight:700;font-size:17px;margin-top:8px;"></p>
-  </div>
-  <div class="result-grid">
-    <div class="result-btn" style="border-color:var(--green);background:rgba(0,212,106,.08);" onclick="logResult('cita')">
-      <div class="result-emoji">✅</div><span class="result-label" style="color:var(--green);">Cita Agendada</span>
-    </div>
-    <div class="result-btn" style="border-color:#2d5a3d;background:rgba(0,212,106,.04);" onclick="logResult('objecion-cita')">
-      <div class="result-emoji">🔄</div><span class="result-label" style="color:#5ddb8a;">Objeción → Cita</span>
-    </div>
-    <div class="result-btn" style="border-color:var(--border);background:rgba(148,163,184,.06);" onclick="logResult('no-contesto')">
-      <div class="result-emoji">📵</div><span class="result-label" style="color:var(--text-dim);">No Contestó</span>
-    </div>
-    <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
-      <div class="result-emoji">🕐</div><span class="result-label" style="color:var(--blue);">Llamar Después</span>
-    </div>
-    <div class="result-btn" style="border-color:var(--red);background:rgba(255,71,87,.08);" onclick="logResult('no-interesado')">
-      <div class="result-emoji">🚫</div><span class="result-label" style="color:var(--red);">No Interesado</span>
-    </div>
-    <div class="result-btn" style="border-color:var(--yellow);background:rgba(251,191,36,.08);" onclick="logResult('mensaje-enviado')">
-      <div class="result-emoji">💬</div><span class="result-label" style="color:var(--yellow);">Mensaje Enviado</span>
-    </div>
-    <div class="result-btn" style="border-color:#444;background:rgba(100,100,100,.06);" onclick="logResult('invalido')">
-      <div class="result-emoji">❌</div><span class="result-label" style="color:var(--text-muted);">Número Inválido</span>
-    </div>
-  </div>
-  <!-- Callback form -->
-  <div id="callbackForm" style="display:none;max-width:420px;margin:0 auto;padding:0 24px;">
-    <div class="card">
-      <h4 style="margin-bottom:12px;font-size:15px;">📅 ¿Cuándo llamar?</h4>
-      <div class="form-group">
-        <label class="form-label">Fecha y hora</label>
-        <input type="datetime-local" class="form-input" id="callbackDT">
-      </div>
-      <div class="form-group" style="margin-top:10px;">
-        <label class="form-label">Nota (opcional)</label>
-        <input type="text" class="form-input" id="callbackNote" placeholder="Ej: mejor en la mañana">
-      </div>
-      <button class="btn btn-primary" style="width:100%;margin-top:14px;" onclick="confirmCallback()">Guardar → Siguiente llamada</button>
-    </div>
-  </div>
-  <div style="text-align:center;margin-top:20px;">
-    <button class="btn btn-secondary" onclick="showScreen('call')">← Volver al guion</button>
-  </div>
-</div>
-
-<!-- WHATSAPP -->
-<div class="screen" id="screen-whatsapp">
-  <div class="page-header">
-    <h2>✅ CITA AGENDADA — MENSAJES DE CONFIRMACIÓN</h2>
-    <p>Completa los datos — los dos mensajes se generan en tiempo real</p>
-  </div>
-  <div class="wa-container">
-    <div class="wa-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Nombre del prospecto</label>
-          <input type="text" class="form-input" id="wa-nombre" placeholder="Ej: Carlos" oninput="updateWA()">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Día y Fecha</label>
-          <input type="text" class="form-input" id="wa-fecha" placeholder="Ej: Martes 18 de Junio" oninput="updateWA()">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Hora</label>
-          <input type="text" class="form-input" id="wa-hora" placeholder="Ej: 7:00 PM" oninput="updateWA()">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Link de Zoom (para Mensaje 2)</label>
-          <input type="text" class="form-input" id="wa-zoom" placeholder="https://zoom.us/j/…" oninput="updateWA()">
-        </div>
-      </div>
-    </div>
-
-    <!-- BLOQUE 1 -->
-    <div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:12px;">
-        <div>
-          <div class="wa-preview-label" style="color:var(--green);">📥 MENSAJE 1 — CONFIRMACIÓN INMEDIATA</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Enviar justo al colgar · NO lleva link</div>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="copyWA1()" style="white-space:nowrap;flex-shrink:0;">📋 Copiar Mensaje 1</button>
-      </div>
-      <div class="wa-preview" id="waPreview1" style="background:#128C7E;"></div>
-      <div class="copy-confirm" id="copyConfirm1">✅ ¡Mensaje 1 copiado!</div>
-    </div>
-
-    <!-- BLOQUE 2 -->
-    <div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:12px;">
-        <div>
-          <div class="wa-preview-label">⏰ MENSAJE 2 — RECORDATORIO DEL DÍA</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Enviar unas horas antes · Incluye el link de Zoom</div>
-        </div>
-        <button class="btn btn-secondary btn-sm" onclick="copyWA2()" style="white-space:nowrap;flex-shrink:0;">📋 Copiar Mensaje 2</button>
-      </div>
-      <div class="wa-preview" id="waPreview2"></div>
-      <div class="copy-confirm" id="copyConfirm2">✅ ¡Mensaje 2 copiado!</div>
-    </div>
-
-    <div class="wa-actions">
-      <button class="btn btn-secondary" onclick="nextCall()">Siguiente llamada →</button>
-    </div>
-  </div>
-</div>
-
-<!-- DIAGNOSTIC -->
-<div class="screen" id="screen-diagnostic">
-  <div class="page-header">
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('home')" style="margin-bottom:14px;">← Inicio</button>
-    <h2>📊 DIAGNÓSTICO SEMANAL</h2>
-    <p>Llena esto cada viernes. Mide. Ajusta. Ataca el lunes.</p>
-  </div>
-  <div class="diag-container">
-
-    <!-- PROGRESO MENSUAL -->
-    <div class="diag-section">
-      <h3>📈 PROGRESO MENSUAL</h3>
-      <div class="goals-grid">
-        <div class="goal-card">
-          <input type="number" class="prog-input" value="0" min="0">
-          <div class="g-target">/ 20 pólizas</div><div class="g-label">Este mes</div>
-        </div>
-        <div class="goal-card">
-          <input type="number" class="prog-input" value="0" min="0">
-          <div class="g-target">/ 10 reclutas</div><div class="g-label">Este mes</div>
-        </div>
-        <div class="goal-card">
-          <input type="number" class="prog-input" value="0" min="0">
-          <div class="g-target">/ 180 referidos</div><div class="g-label">Este mes</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- LLAMADAS -->
-    <div class="diag-section">
-      <h3>📞 DIAGNÓSTICO DE LLAMADAS</h3>
-      <div class="diag-q">¿Hice mis 50–75 llamadas esta semana?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'llamadas','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'llamadas','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-llamadas-si">✅ Bien. Revisa la siguiente métrica →</div>
-      <div class="diag-feedback" id="diag-llamadas-no">
-        🔍 ¿Cuál fue la razón real? (no la excusa)
-        <div class="diag-sub-btns">
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">😴 Falta de energía</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">😨 Miedo / resistencia</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">👥 Falta de leads</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">⏰ Falta de tiempo</button>
-        </div>
-        <div style="margin-top:10px;" class="diag-highlight">→ Eso es exactamente lo que ajustas la próxima semana.</div>
-      </div>
-    </div>
-
-    <!-- CITAS -->
-    <div class="diag-section">
-      <h3>📅 DIAGNÓSTICO DE CITAS</h3>
-      <div class="diag-q">¿Convertí 1 de cada 3–5 llamadas en cita?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'citas','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'citas','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-citas-si">✅ El guion está funcionando. ¡Mantén el ritmo!</div>
-      <div class="diag-feedback" id="diag-citas-no">
-        🔍 El guion necesita ajuste. ¿En qué parte te trabas?
-        <div class="diag-sub-btns">
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">🎙️ Al abrir la llamada</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">⚔️ Al manejar objeciones</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">🎯 Al cerrar la cita</button>
-        </div>
-        <div style="margin-top:10px;" class="diag-highlight">→ Repasa ese punto específico el lunes.</div>
-      </div>
-    </div>
-
-    <!-- PRESENTACIONES -->
-    <div class="diag-section">
-      <h3>🖥️ DIAGNÓSTICO DE PRESENTACIONES</h3>
-      <div class="diag-q">¿Completé las presentaciones que agendé?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'pres','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'pres','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-pres-si">✅ Bien.</div>
-      <div class="diag-feedback" id="diag-pres-no">
-        🔍 ¿Cuántas no se presentaron? ¿Estaba la pareja en el Zoom?
-        <div style="margin-top:8px;" class="diag-highlight">→ Si más del 30% no se presentan, llama a confirmar 10 minutos antes de cada cita.</div>
-      </div>
-    </div>
-
-    <!-- CIERRES -->
-    <div class="diag-section">
-      <h3>💰 DIAGNÓSTICO DE CIERRES</h3>
-      <div class="diag-q">¿Cerré 1 de cada 5 presentaciones?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'cierres','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'cierres','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-cierres-si">✅ El proceso de cierre está funcionando.</div>
-      <div class="diag-feedback" id="diag-cierres-no">
-        🔍 Identifica el patrón de pérdida:
-        <div class="diag-sub-btns">
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">💭 "Lo voy a pensar"</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">💸 Falta de dinero</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">👫 No estaba la pareja</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">📺 El video no convenció</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- REFERIDOS -->
-    <div class="diag-section">
-      <h3>🤝 DIAGNÓSTICO DE REFERIDOS</h3>
-      <div class="diag-q">¿Pedí referidos en cada presentación?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'ref','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'ref','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-ref-si">
-        ✅ ¿Cuántos obtuviste por presentación en promedio?
-        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-          <input type="number" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:7px;width:70px;font-size:15px;outline:none;" value="0">
-          <span style="font-size:12px;color:var(--text-dim);">referidos por cita</span>
-        </div>
-      </div>
-      <div class="diag-feedback" id="diag-ref-no">
-        ⚠️ <span class="diag-highlight">Esta es la fuga de dinero más fácil de tapar.</span>
-        <div style="margin-top:8px;">→ La pedida de referidos se está saltando. Vuelve a revisar el guion del Bloque 2.</div>
-      </div>
-    </div>
-
-    <!-- REDES -->
-    <div class="diag-section">
-      <h3>📲 DIAGNÓSTICO DE REDES SOCIALES</h3>
-      <div class="diag-q">¿Publiqué los 10 contenidos de la semana?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'redes','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'redes','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-redes-si">
-        ✅ ¿Cuál generó más interacción? Repite ese formato la próxima semana.
-        <input type="text" class="form-input" style="margin-top:10px;" placeholder="Formato ganador de esta semana…">
-      </div>
-      <div class="diag-feedback" id="diag-redes-no">
-        📉 El contenido no publicado es dinero no sembrado.
-        <div class="diag-sub-btns">
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">⏰ Falta de tiempo</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">💡 Falta de ideas</button>
-          <button class="diag-sub-btn" onclick="toggleSubBtn(this)">😴 Falta de energía</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- EQUIPO -->
-    <div class="diag-section">
-      <h3>👥 DIAGNÓSTICO DE EQUIPO</h3>
-      <div class="diag-q">¿Envié el mensaje de seguimiento del lunes a cada recluta?</div>
-      <div class="diag-btns">
-        <button class="diag-btn yes-btn" onclick="diagAnswer(this,'equipo','si')">✅ SÍ</button>
-        <button class="diag-btn no-btn" onclick="diagAnswer(this,'equipo','no')">❌ NO</button>
-      </div>
-      <div class="diag-feedback" id="diag-equipo-si">
-        ✅ ¿Cuántos respondieron? ¿Cuántos avanzaron?
-        <div style="display:flex;gap:14px;margin-top:10px;">
-          <div><div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">Respondieron</div><input type="number" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:7px;width:70px;font-size:15px;outline:none;" value="0"></div>
-          <div><div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">Avanzaron</div><input type="number" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:7px;width:70px;font-size:15px;outline:none;" value="0"></div>
-        </div>
-      </div>
-      <div class="diag-feedback" id="diag-equipo-no">
-        🚨 <span class="diag-highlight">Sin seguimiento, el equipo no se mueve.</span>
-        <div style="margin-top:6px;">Es tu responsabilidad, no la de ellos.</div>
-      </div>
-    </div>
-
-    <!-- 3 DECISIONES -->
-    <div class="diag-section decisions-section">
-      <h3>⚡ LAS 3 DECISIONES DE LA PRÓXIMA SEMANA</h3>
-      <div class="card-note">
-        Solo 3. Acciones concretas, no intenciones.<br>
-        ❌ MAL: "Voy a ser más disciplinado con las llamadas"<br>
-        ✅ BIEN: "Haré mis primeras 10 llamadas antes de las 2pm todos los días"
-      </div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <div class="form-group"><label class="form-label">Decisión 1</label><input type="text" class="form-input" placeholder="Acción concreta y medible…"></div>
-        <div class="form-group"><label class="form-label">Decisión 2</label><input type="text" class="form-input" placeholder="Acción concreta y medible…"></div>
-        <div class="form-group"><label class="form-label">Decisión 3</label><input type="text" class="form-input" placeholder="Acción concreta y medible…"></div>
-      </div>
-      <button class="btn btn-primary" style="width:100%;margin-top:18px;" onclick="showScreen('home')">✅ DIAGNÓSTICO COMPLETO — Volver al Inicio</button>
-    </div>
-
-  </div>
-</div>
-
-<!-- PROSPECTOS DEL DÍA -->
-<div class="screen" id="screen-prospectos">
-  <div class="page-header">
-    <button class="btn btn-sm btn-secondary" onclick="showScreen('home')" style="margin-bottom:14px;">← Inicio</button>
-    <h2>👥 PROSPECTOS DEL DÍA</h2>
-    <p id="prospectos-status" style="min-height:18px;">Carga tu lista desde Google Sheets o agrégalos manualmente.</p>
-  </div>
-  <div style="max-width:760px;margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:16px;">
-
-    <!-- Actions -->
-    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="loadProspectosFromSheets()">🔄 Cargar desde Sheets</button>
-      <button class="btn btn-secondary" onclick="showScreen('type-selector')">📞 Iniciar llamada directa</button>
-    </div>
-
-    <!-- Add form -->
-    <div class="prospecto-add-form">
-      <div class="sidebar-section-title" style="margin-bottom:12px;">➕ AGREGAR PROSPECTO MANUALMENTE</div>
-      <div class="form-row" style="margin-bottom:10px;">
-        <div class="form-group">
-          <label class="form-label">Nombre *</label>
-          <input type="text" class="form-input" id="new-nombre" placeholder="Nombre completo">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Teléfono</label>
-          <input type="text" class="form-input" id="new-tel" placeholder="+1 (555) 000-0000">
-        </div>
-      </div>
-      <div class="form-row" style="margin-bottom:12px;">
-        <div class="form-group">
-          <label class="form-label">Tipo</label>
-          <select class="form-input" id="new-tipo">
-            <option value="referido-conocido">👥 Referido Conocido</option>
-            <option value="referido-frio">❄️ Referido Frío</option>
-            <option value="redes-sociales">📱 Lead de Redes</option>
-            <option value="base-datos">📋 Base de Datos</option>
-            <option value="reclutamiento">💼 Reclutamiento</option>
-            <option value="frio-personal">🧊 Contacto Frío Personal</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Referido por (opcional)</label>
-          <input type="text" class="form-input" id="new-ref" placeholder="Nombre del referidor">
-        </div>
-      </div>
-      <button class="btn btn-primary" style="width:100%;" onclick="addProspectoManual()">➕ Agregar y sincronizar a Sheets</button>
-      <div class="copy-confirm" id="prospecto-added" style="display:none;">✅ ¡Prospecto agregado!</div>
-    </div>
-
-    <!-- Prospectos list -->
-    <div id="prospectos-list" style="display:flex;flex-direction:column;gap:10px;">
-      <p style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">Haz clic en "Cargar desde Sheets" para ver tus prospectos, o agrégalos arriba.</p>
-    </div>
-  </div>
-</div>
-
-<!-- =================== JAVASCRIPT =================== -->
-<script>
-// ===== SCRIPTS DATA =====
-const SCRIPTS = {
-  'ref-conocido-principal': {
-    name: 'Guion de la Oficina',
-    type: 'B2C Principal — Duplicable',
-    steps: [
-      { label: 'PASO 1 — SALUDO CORDIAL', text: '¡Hola [NOMBRE]! Qué gusto saludarte, ¿cómo estás?\n\n[PAUSA — Espera respuesta]\n\nQué bueno, me alegro mucho.' },
-      { label: 'PASO 2 — ¿TIENES 1 MINUTO?', text: 'Mira [NOMBRE], te llamo rápido... ¿tienes un minuto?' },
-      { label: 'PASO 3 — GANCHO ENTRENAMIENTO', text: 'Excelente. Te cuento que estoy muy contento porque estoy sacando unas licencias con el estado. Como parte de mi entrenamiento, tengo que completar unas sesiones mostrando una presentación interactiva de 10 minutos y pensé en ti de inmediato porque eres de mi total confianza.' },
-      { label: 'PASO 4 — PROPUESTA DE VALOR', text: 'No te voy a vender nada, son solo 10 minutos por Zoom para mostrarte el sistema de forma muy visual. A ti te sirve para ver cómo funcionan otros sectores y a mí me apoya para mi entrenamiento con mi coach.' },
-      { label: 'PASO 5 — CIERRE ⭐', text: '¿Me puedes ayudar con eso?\n\n¿Te queda mejor HOY al final de la tarde o MAÑANA en la mañana?' },
-      { label: 'PASO 6 — FILTRO PAREJA WFA', text: 'Buenísimo. Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Les queda mejor hoy o mañana?' },
-    ]
-  },
-  'ref-conocido-ampliado': {
-    name: 'Guion Entrenamiento Ampliado',
-    type: 'Alternativa — Favor de Total Confianza',
-    steps: [
-      { label: 'PASO 1 — APERTURA', text: '¡Hola [NOMBRE]! ¿Cómo estás? Te habla Miguel Romero. Oye, te llamo rápido porque quería comunicarme contigo para pedirte un favor de total confianza.' },
-      { label: 'PASO 2 — GANCHO LICENCIA', text: 'Te cuento rápido: estoy sacando unas licencias muy importantes con el estado y, para completar mi entrenamiento, tengo que hacer unas sesiones mostrando una presentación interactiva de 10 minutos a personas de mi total confianza.' },
-      { label: 'PASO 3 — PEDIDO PERSONAL', text: 'Pensé en ti de inmediato. ¿Crees que me puedas dar 10 minutos de tu tiempo hoy o mañana? A ti te sirve para ver cómo funcionan otros sectores y a mí me apoyas a avanzar con mis metas de práctica con mi coach.' },
-      { label: 'PASO 4 — FILTRO PAREJA WFA ⭐', text: 'Buenísimo. Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Les queda mejor hoy o mañana?' },
-    ]
-  },
-  'ref-frio': {
-    name: 'Guion Interrupción Consultiva',
-    type: 'Referido Frío — Fusión Angélica',
-    steps: [
-      { label: 'PASO 1 — APERTURA POR REFERENCIA', text: 'Hola, ¿hablo con [NOMBRE]? Qué tal, te habla Miguel Romero. Te llamo por sugerencia de [NOMBRE DEL REFERIDO], con quien estuvimos trabajando en nuestro proyecto de consultoría. Sé que te tomo por sorpresa y que no esperabas mi llamada, así que seré súper breve:' },
-      { label: 'PASO 2 — PROPUESTA EN 30 SEG', text: 'Nosotros ayudamos a las familias y profesionales hispanos en este país a detectar dónde están teniendo fugas de dinero por intereses bancarios o deudas. ¿Te puedo decir en 30 segundos por qué me dio tu número [NOMBRE DEL REFERIDO] y tú decides si tiene sentido para ti o lo dejamos ahí?' },
-      { label: 'PASO 3 — DIAGNÓSTICO DE DOLOR', text: '[PAUSA - Esperar respuesta]\n\n[NOMBRE DEL REFERIDO] me dijo que eres una persona muy trabajadora. El problema es que en este país el dinero se nos escapa de las manos de forma muy fácil. Nosotros corremos una herramienta digital que te genera un mapa de tus números.\n\nPara validar algo rápido: hoy en día, ¿tus metas familiares están más enfocadas en eliminar deudas de tarjetas rápido o en aprender a multiplicar tus ahorros?' },
-      { label: 'PASO 4 — CIERRE + FILTRO PAREJA WFA ⭐', text: 'Entiendo perfectamente. Vamos a agendar una sesión de 10 minutos por Zoom HOY tarde o MAÑANA. Te muestro el sistema y corremos tus números. Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Qué horario les queda mejor?' },
-    ]
-  },
-  'redes': {
-    name: 'Guion Leads de Redes Sociales',
-    type: 'Lead Digital — Instagram / TikTok',
-    steps: [
-      { label: 'PASO 1 — CONEXIÓN DIGITAL', text: '¡Hola [NOMBRE]! Te habla Miguel Romero de Instagram/TikTok, ¿cómo estás? Te llamo rápido tal como coordinamos por el mensaje directo. Primero que nada, te felicito por comentar mi video, eso demuestra que cuidas el futuro de tu casa.' },
-      { label: 'PASO 2 — URGENCIA + PLATAFORMA', text: 'Como te prometí, te llamo rápido porque la idea es darte acceso inmediato a la plataforma para que la veas. No te quiero quitar tiempo por teléfono, así que estamos haciendo las demostraciones del sistema en vivo por Zoom HOY al final del día o MAÑANA.' },
-      { label: 'PASO 3 — PROPUESTA DE VALOR', text: 'Vamos a proyectar la plataforma interactiva en solo 10 minutos para mostrarte cómo correr tus números y ganarle a la devaluación.' },
-      { label: 'PASO 4 — FILTRO PAREJA + CIERRE ⭐', text: 'Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Te queda mejor hoy a las 6:00 pm o mañana a las 11:00 am?' },
-    ]
-  },
-  'bd-auditoria': {
-    name: 'El Enfoque del Banco',
-    type: 'Base de Datos — Rendimiento Bancario',
-    steps: [
-      { label: 'PASO 1 — APERTURA', text: '¡Hola [NOMBRE]! Te habla Miguel Romero. Te marco rápido porque estamos compartiendo una iniciativa informativa muy sencilla con la comunidad aquí en [ESTADO].' },
-      { label: 'PASO 2 — EL GANCHO EMPÁTICO', text: 'Básicamente le estamos mostrando a las familias cómo funciona una herramienta digital para ver si su banco les está dando las ventajas que realmente merecen por sus ahorros o si hay opciones más inteligentes hoy en día.' },
-      { label: 'PASO 3 — PROPUESTA DE VALOR', text: 'No te voy a vender nada, son solo 10 minutos por Zoom para mostrarte el sistema de forma muy visual. A ti te sirve para ver cómo funcionan otros sectores y a mí me apoya para mis metas de práctica.' },
-      { label: 'PASO 4 — CIERRE + WFA ⭐', text: 'Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Les queda mejor hoy al final de la tarde o mañana?' },
-    ]
-  },
-  'bd-tarjetas': {
-    name: 'El Enfoque de Tarjetas',
-    type: 'Base de Datos — Gatillo de Alivio',
-    steps: [
-      { label: 'PASO 1 — APERTURA', text: '¡Hola [NOMBRE]! Te habla Miguel Romero. Te marco rápido por una campaña de apoyo que estamos moviendo con conocidos y referidos de la oficina.' },
-      { label: 'PASO 2 — EL GANCHO EMPÁTICO', text: 'Todos sabemos que este país está diseñado para que uno termine pagando el triple por lo que compra con tarjetas de crédito. Le estamos enseñando a la gente cómo usar un sistema digital para recortar ese tiempo a la mitad y dejar de regalarle dinero a los bancos.' },
-      { label: 'PASO 3 — PROPUESTA DE VALOR', text: 'No te voy a vender nada, nos conectamos solo 10 minutos por Zoom para que veas la herramienta de forma muy visual. A ti te sirve para conocer cómo funcionan otros sectores y a mí me ayuda con mi entrenamiento.' },
-      { label: 'PASO 4 — CIERRE + WFA ⭐', text: 'Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Prefieren hoy al final de la tarde o mañana?' },
-    ]
-  },
-  'bd-cobertura': {
-    name: 'El Enfoque de Estabilidad',
-    type: 'Base de Datos — Protección Familiar',
-    steps: [
-      { label: 'PASO 1 — APERTURA', text: '¡Hola [NOMBRE]! Te saluda Miguel Romero rápido. Te llamo porque estamos ayudando a varias familias de la comunidad en [CIUDAD] a proteger la estabilidad de sus casas con todo lo que está pasando en el país.' },
-      { label: 'PASO 2 — EL GANCHO EMPÁTICO', text: 'Muchos profesionales están tranquilos porque el empleo les da ciertos beneficios, pero el peligro es que si mañana hay un recorte, la familia queda desprotegida de inmediato. Estamos mostrando cómo usar un software interactivo para crear una protección propia por fuera del trabajo.' },
-      { label: 'PASO 3 — PROPUESTA DE VALOR', text: 'No hay obligación de nada, son solo 10 minutos en Zoom para mostrarte el comportamiento del sistema de forma muy visual. A ti te sirve para ver cómo funcionan otros sectores y a mí me suma para mis metas.' },
-      { label: 'PASO 4 — CIERRE + WFA ⭐', text: 'Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Nos vemos hoy en la tarde o mañana en la mañana?' },
-    ]
-  },
-  'rec-expansion': {
-    name: 'Guion Expansión de Oficina',
-    type: 'Reclutamiento — Oportunidad a Tiempo Parcial',
-    steps: [
-      { label: 'PASO 1 — APERTURA', text: 'Hola [NOMBRE], ¿cómo estás? Te habla Miguel Romero. Te marco rápido porque una gran compañía a nivel nacional me ha dado la oportunidad de formar parte de su equipo de expansión en esta zona.' },
-      { label: 'PASO 2 — CALIFICACIÓN RÁPIDA', text: 'Estamos abriendo oficinas y en pleno proceso de entrenamiento de nuevos líderes a tiempo parcial. Sé que estás en lo tuyo, pero quería validar algo rápido: ¿tú mantienes tus opciones abiertas para generar ingresos extra en este país sin dejar tu actividad actual?' },
-      { label: 'PASO 3 — VALIDACIÓN', text: '[PAUSA — El prospecto dice que sí]\n\nPerfecto, sabía que eras una persona de mentalidad abierta.' },
-      { label: 'PASO 4 — CIERRE CON PAREJA ⭐', text: 'Vamos a coordinar una sesión de 10 minutos vía Zoom HOY al final del día o MAÑANA temprano para mostrarte la plataforma interactiva, el plan de carrera y cómo construir un sistema de ganancias. Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Les funciona mejor a las 6:00 pm o a las 8:30 pm?' },
-    ]
-  },
-  'rec-gancho': {
-    name: 'Gancho Inverso por Recomendación',
-    type: 'Reclutamiento — Psicología Eric Worre',
-    steps: [
-      { label: 'PASO 1 — APERTURA CON STATUS', text: '¡Hola [NOMBRE]! ¿Cómo estás? Te habla Miguel Romero. Oye, te marco rápido porque tú eres una de las personas más inteligentes y con mejores contactos que conozco en esta zona, y siempre he respetado mucho tu criterio de negocios.' },
-      { label: 'PASO 2 — EL GANCHO INVERSO', text: 'Te cuento rápido: estoy expandiendo un proyecto nacional aquí en el mercado hispano y estoy buscando personas clave, con mentalidad ganadora, que quieran entrenarse a tiempo parcial. No sé si tú conozcas a alguien con ese perfil que quiera generar más ingresos...' },
-      { label: 'PASO 3 — LA TRAMPA AMIGABLE', text: 'Pero me harías un favor si me permites mostrarte en una presentación interactiva de 10 minutos por Zoom lo que hacemos, para que veas el perfil exacto de gente que busco y me digas a quién me recomiendas.' },
-      { label: 'PASO 4 — CIERRE CON PAREJA ⭐', text: 'Tengo espacio en la agenda HOY en la noche o MAÑANA en la tarde. Lo ideal es que estés con tu pareja para que tengan el panorama completo y me ayuden, y además a mí la cita me cuente por dos para mis metas de expansión. ¿Qué horario les queda mejor?' },
-    ]
-  },
-  'frio-personal': {
-    name: 'Contacto Frío Personal',
-    type: 'Conocido casual — sin relación activa',
-    steps: [
-      { label: 'PASO 1 — APERTURA', text: '¡Hola [NOMBRE]! ¿Cómo estás? Te habla Miguel Romero — hablamos hace un tiempo, no sé si me recuerdas.' },
-      { label: 'PASO 2 — ANCLA SUAVE', text: 'Tenía tu número guardado — hablamos de buscar algo diferente. ¿Sigues en eso o ya lo encontraste?' },
-      { label: 'PASO 3 — CURIOSIDAD SIN REVELAR ⭐', text: 'Mira, encontré algo que vale la pena ver. Son solo 10 minutos por Zoom para mostrarte un sistema muy visual — no te cuento más por teléfono para no quitarte tiempo. ¿HOY o MAÑANA te queda mejor?' },
-      { label: 'PASO 4 — FILTRO PAREJA WFA', text: 'Excelente. Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Les queda mejor hoy o mañana?' },
-    ]
+  } catch (ex) {
+    const cb = (e.parameter && e.parameter.callback) || null;
+    return makeResponse({ success: false, error: 'doGet: ' + ex.message }, cb);
   }
-};
+}
 
-const TYPE_MAP = {
-  'referido-conocido': ['ref-conocido-principal','ref-conocido-ampliado'],
-  'referido-frio': ['ref-frio'],
-  'redes-sociales': ['redes'],
-  'base-datos': ['bd-auditoria','bd-tarjetas','bd-cobertura'],
-  'reclutamiento': ['rec-expansion','rec-gancho'],
-  'frio-personal': ['frio-personal']
-};
-
-const GUIDANCE = {
-  'referido-conocido': {
-    sub: 'Referido Conocido — familiar, amigo o conocido',
-    opts: [
-      { icon:'📞', title:'Llama directo', desc:'Lo conoces. Usa el Guion de la Oficina. No mandes mensaje primero — la llamada directa genera más urgencia.', action: () => showScripts('referido-conocido') },
-      { icon:'💬', title:'Primero un WhatsApp', desc:'Si no hablan seguido, manda antes:', msg:'"Hola [Nombre]! ¿Cómo estás? Cuando tengas un minuto me gustaría comentarte algo rápido, ¿te puedo llamar hoy?"', action: () => showScripts('referido-conocido') }
-    ]
-  },
-  'referido-frio': {
-    sub: 'Referido Frío — alguien que no te conoce',
-    opts: [
-      { icon:'📞', title:'Llama directo', desc:'Menciona el nombre de quien lo refirió. Úsalo como puerta de entrada. Usa el Guion de Interrupción Consultiva.', action: () => loadScript('ref-frio') }
-    ]
-  },
-  'redes-sociales': {
-    sub: 'Lead de Redes Sociales — interactuó con tu contenido',
-    opts: [
-      { icon:'💬', title:'Confirma por DM antes de llamar', desc:'Manda primero:', msg:'"Hola [Nombre]! Voy a llamarte en 5 minutos tal como coordinamos 😊"', action: null },
-      { icon:'📞', title:'Ya coordinaron — llamar ahora', desc:'Usa el Guion de Leads de Redes Sociales.', action: () => loadScript('redes') }
-    ]
-  },
-  'base-datos': {
-    sub: 'Base de Datos — número desconocido o base externa',
-    opts: [
-      { icon:'📞', title:'Llamar directo', desc:'Elige el ángulo de dolor más adecuado para este prospecto.', action: () => showScripts('base-datos') },
-      { icon:'💬', title:'WhatsApp primero (si tienes su número)', desc:'Manda antes:', msg:'"Hola [Nombre]! Te habla Miguel Romero. Estamos corriendo una campaña de concientización financiera para familias hispanas. ¿Puedo llamarte en 10 minutos para compartirte algo de valor?"', action: () => showScripts('base-datos') }
-    ]
-  },
-  'reclutamiento': {
-    sub: 'Reclutamiento — perfil de líder, oportunidad de negocio',
-    opts: [
-      { icon:'📞', title:'Llamar directo', desc:'Usa el Gancho Inverso si es alguien con estatus alto. Usa Expansión de Oficina para contacto directo.', action: () => showScripts('reclutamiento') },
-      { icon:'💬', title:'Mensaje previo por LinkedIn/WhatsApp', desc:'Manda antes:', msg:'"Hola [Nombre], me puse en contacto porque tu perfil encaja exactamente con el tipo de persona que estoy buscando para un proyecto de expansión. ¿Cuándo podría mostrarte los detalles en 30 min?"', action: () => showScripts('reclutamiento') }
-    ]
-  },
-  'frio-personal': {
-    sub: 'Contacto Frío Personal — conocido casual, sin relación activa',
-    opts: [
-      { icon:'📞', title:'Llamar directo', desc:'Tienes su número. Usa el guion de contacto frío personal — 4 pasos, sin revelar la empresa, objetivo único: conseguir la cita.', action: () => loadScript('frio-personal') }
-    ]
+// Devuelve TextOutput normal (JSON) o JSONP según si hay callback.
+function makeResponse(data, callback) {
+  const json = JSON.stringify(data);
+  if (callback) {
+    // JSONP — el navegador ejecuta el script y llama la función definida en Call Commander
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
-};
+  return ContentService
+    .createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
-const OBJECTIONS = [
-  {
-    trigger: '"¿De qué se trata? / Cuéntame más"',
-    resp: '— RECONOCER: "Claro, entiendo que quieres saber antes de comprometer tu tiempo."\n\n— ASOCIAR: "De hecho, esa es exactamente la pregunta que hacen las personas más inteligentes con las que trabajo — no entran a nada sin antes asegurarse de que vale la pena."\n\n— PREGUNTAR: "Como es una plataforma visual, mostrártela en Zoom toma solo 10 minutos. ¿Te queda mejor hoy o mañana?"'
-  },
-  {
-    trigger: '"No tengo tiempo"',
-    resp: '— RECONOCER: "Totalmente, el tiempo es lo más valioso que tienes, lo entiendo perfectamente."\n\n— ASOCIAR: "Por eso mismo las personas más ocupadas son las que más le sacan provecho a esto, porque saben que 10 minutos bien invertidos les optimizan la agenda."\n\n— PREGUNTAR: "Precisamente por tu tiempo son solo 10 minutos al grano. ¿Qué te queda mejor, hoy al final de la tarde o mañana temprano?"'
-  },
-  {
-    trigger: '"No me interesa"',
-    resp: '— RECONOCER: "Lo entiendo perfectamente."\n\n— ASOCIAR: "La mayoría de personas dijeron lo mismo antes de ver el sistema en la pantalla; luego me dicen que fue lo mejor que pudieron hacer por su casa."\n\n— PREGUNTAR: "Dime algo — ¿qué es lo que menos te llama la atención, la parte de ver cómo funcionan otros sectores o la de generar ingresos extra?"'
-  },
-  {
-    trigger: '"Mándame información / Un PDF"',
-    resp: '— RECONOCER: "Con gusto, me parece excelente que quieras revisar la información."\n\n— ASOCIAR: "El tema es que nuestro sistema interactivo no funciona en PDF — es como pedirle a una foto que te maneje el auto. Para que le veas utilidad real, hay que verlo en vivo."\n\n— PREGUNTAR: "Son solo 10 minutos en la pantalla para que tú mismo lo evalúes. ¿Te queda mejor hoy o mañana?"'
-  },
-  {
-    trigger: '"Ya tengo algo / Estoy bien"',
-    resp: '— RECONOCER: "Qué bueno, de verdad me alegra mucho escuchar eso."\n\n— ASOCIAR: "Las personas que mejor responden a lo que hago son las que ya están bien, porque entienden más rápido el valor de blindar lo que tienen y no empiezan desde cero."\n\n— PREGUNTAR: "Dime, ¿estarías abierto a evaluar algo que podría mejorar o blindar lo que ya tienes? ¿Hoy o mañana?"'
-  },
-  {
-    trigger: '"Lo voy a pensar"',
-    resp: '— RECONOCER: "Totalmente comprensible, es una decisión importante."\n\n— PREGUNTAR DIRECTO (ve al fondo):\n"¿Qué es lo que estás considerando exactamente? ¿Cuál es tu mayor duda?"\n\n[PAUSA — deja que hable]\n\n"¿Qué tendría que pasar para que esto fuera un sí definitivo?"'
-  },
-  {
-    trigger: '"Voy a consultarlo con mi pareja"',
-    resp: '— RECONOCER: "Perfecto, me parece muy bien — es una decisión de los dos."\n\n— ASOCIAR: "Precisamente por eso la presentación de 10 minutos es para los dos juntos — así se ahorran el trabajo de tener que explicárselo después y tienen toda la información en vivo."\n\n— PREGUNTAR: "¿Qué día están libres ambos por solo 10 minutos, hoy en la tarde o mañana?"'
-  },
-  {
-    trigger: '"¿Es una pirámide o multinivel?"',
-    resp: '— RECONOCER: "Entiendo perfectamente tu duda, hoy en día hay que tener mucho cuidado con lo que hay allá afuera."\n\n— ASOCIAR: "De hecho, las personas más serias con las que trabajo me preguntan exactamente lo mismo porque buscan algo legal, regulado y con pies y cabeza."\n\n— PREGUNTAR: "Como te comenté, estoy sacando unas licencias con el estado y todo el proyecto es 100% oficial. Para que veas el sistema tú mismo en 10 minutos, ¿te queda mejor hoy o mañana?"'
-  },
-  {
-    trigger: '"¿Es venta de seguros?"',
-    resp: '— RECONOCER: "Es una pregunta muy válida, qué bueno que me lo mencionas."\n\n— ASOCIAR: "La mayoría de los profesionales asumen que es solo eso antes de verlo, pero luego se dan cuenta de que el alcance de la plataforma digital es mucho más de lo que imaginan."\n\n— PREGUNTAR: "Para mostrarte exactamente cómo funciona el sistema en solo 10 minutos, ¿te queda más cómodo hoy al final de la tarde o mañana?"'
-  },
-  {
-    trigger: '"¿Me van a cobrar algo?"',
-    resp: '— RECONOCER: "Te entiendo por completo, el presupuesto de la casa siempre hay que cuidarlo."\n\n— ASOCIAR: "De hecho, todo el mundo me pregunta lo mismo antes de conectarse. El espacio de 10 minutos es puramente educativo e informativo, no te va a costar absolutamente nada."\n\n— PREGUNTAR: "Sabiendo que es 100% gratuito y sin ningún compromiso de tu parte, ¿nos vemos hoy o mañana?"'
+// ===== MANEJADOR POST (escritura) =====
+function doPost(e) {
+  try {
+    const data   = JSON.parse(e.postData.contents);
+    const action = data.action;
+
+    if (action === 'logCall') {
+      return jsonOk(logCall(data)); // logCall devuelve objeto plano → envolver en TextOutput
+    }
+
+    if (action === 'addProspecto') {
+      return addProspecto(data);
+    }
+
+    if (action === 'updateProspecto') {
+      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      actualizarEstadoProspecto(ss, data.nombre, data.estado, data.callback, data.notas);
+      return jsonOk({ mensaje: 'Prospecto actualizado.' });
+    }
+
+    return jsonError('Acción no reconocida: ' + action);
+
+  } catch (ex) {
+    return jsonError('doPost: ' + ex.message);
   }
-];
+}
 
-// ===== GOOGLE SHEETS INTEGRATION =====
-let WEBAPP_URL = localStorage.getItem('cc_webapp_url') || '';
+// ===== REGISTRAR LLAMADA VÍA GET (JSONP) =====
+// El redirect 302 de GAS convierte POST→GET y pierde el body.
+// Solución: aceptar logCall como acción GET con params en la URL.
+function logCallFromParams(p) {
+  return logCall({
+    nombre:    p.nombre    || '',
+    telefono:  p.telefono  || '',
+    tipo:      p.tipo      || '',
+    estado:    p.estado    || '',
+    guion:     p.guion     || '',
+    fechaCita: p.fechaCita || '',
+    horaCita:  p.horaCita  || '',
+    linkZoom:  p.linkZoom  || '',
+    callback:  p.callback  || '',
+    notas:     p.notas     || ''
+  });
+}
 
-function setSyncStatus(status) {
-  const dot = document.getElementById('sync-dot');
-  const lbl = document.getElementById('sync-label');
-  const map = {
-    none:    { c:'#475569', t:'Sin conectar' },
-    idle:    { c:'var(--blue)', t:'Conectado' },
-    syncing: { c:'var(--yellow)', t:'Sincronizando…' },
-    ok:      { c:'var(--green)', t:'✓ Sincronizado' },
-    error:   { c:'var(--red)', t:'⚠ Error de sync' }
+// ===== REGISTRAR LLAMADA =====
+function logCall(data) {
+  const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sh  = getOrCreateSheet(ss, SHEET_LLAMADAS, [
+    'ID', 'Fecha', 'Hora', 'Nombre', 'Teléfono',
+    'Tipo', 'Estado', 'Guion',
+    'Fecha Cita', 'Hora Cita', 'Link Zoom',
+    'Callback', 'Notas'
+  ]);
+
+  const tz    = Session.getScriptTimeZone();
+  const now   = new Date();
+  const fecha = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  const hora  = Utilities.formatDate(now, tz, 'HH:mm');
+  const id    = Utilities.getUuid().substring(0, 8).toUpperCase();
+
+  sh.appendRow([
+    id,
+    fecha,
+    hora,
+    data.nombre     || '',
+    data.telefono   || '',
+    data.tipo       || '',
+    data.estado     || '',
+    data.guion      || '',
+    data.fechaCita  || '',
+    data.horaCita   || '',
+    data.linkZoom   || '',
+    data.callback   || '',
+    data.notas      || ''
+  ]);
+
+  // Actualizar SEGUIMIENTO y Prospectos con el resultado de la llamada
+  if (data.nombre) {
+    try {
+      actualizarEstadoProspecto(ss, data.nombre, data.estado, data.callback, data.notas);
+    } catch (e) {
+      Logger.log('actualizarEstadoProspecto error: ' + e.message);
+    }
+  }
+
+  // Devuelve objeto plano para que logCallFromParams pueda ser usado en JSONP via doGet
+  return { success: true, id: id, mensaje: 'Llamada registrada.' };
+}
+
+// ===== AGREGAR PROSPECTO =====
+function addProspecto(data) {
+  const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sh  = getOrCreateSheet(ss, SHEET_PROSPECTOS, [
+    'ID', 'Nombre', 'Teléfono', 'Tipo', 'Referido Por',
+    'Estado', 'Prioridad', 'Fecha Agregado', 'Notas'
+  ]);
+
+  const tz  = Session.getScriptTimeZone();
+  const hoy = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  const id  = Utilities.getUuid().substring(0, 8).toUpperCase();
+
+  sh.appendRow([
+    id,
+    data.nombre      || '',
+    data.telefono    || '',
+    data.tipo        || '',
+    data.referidoPor || '',
+    'Pendiente',
+    data.prioridad   || 'Normal',
+    hoy,
+    data.notas       || ''
+  ]);
+
+  return jsonOk({ id: id, mensaje: 'Prospecto agregado.' });
+}
+
+// ===== OBTENER PROSPECTOS (devuelve objeto plano, no TextOutput) =====
+function getProspectosData() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  // Prioridad de fuente:
+  //   1. Tab "Prospectos"     — generado por Call Commander, datos normalizados
+  //   2. Tab "📋 SEGUIMIENTO" — CRM principal de Miguel: 65 contactos con etapa, score, estrategia
+  //   3. Tab "📞 DIRECTORIO"  — directorio crudo de 70 contactos
+  //   4. Array vacío (instrucciones al usuario)
+  let sh   = ss.getSheetByName(SHEET_PROSPECTOS);
+  let mode = 'prospectos';
+
+  if (!sh) { sh = ss.getSheetByName(SHEET_SEGUIMIENTO); mode = 'seguimiento'; }
+  if (!sh) { sh = ss.getSheetByName(SHEET_DIRECTORIO);  mode = 'directorio';  }
+  if (!sh) return {
+    success: true, data: [], total: 0,
+    note: 'Crea el tab "Prospectos" en tu hoja o agrega contactos desde Call Commander.'
   };
-  const s = map[status] || map.none;
-  if (dot) dot.style.background = s.c;
-  if (lbl) lbl.textContent = s.t;
-}
 
-// ===== JSONP FETCH ==============================================
-// Usa un <script> tag en lugar de fetch() para eludir el problema
-// de CORS causado por el redirect de GAS (script.google.com →
-// script.googleusercontent.com). El GAS detecta el parámetro
-// ?callback= y envuelve la respuesta en callback(json).
-// ================================================================
-function jsonpFetch(url) {
-  return new Promise(function(resolve, reject) {
-    const cbName = '_cc_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
-    const script = document.createElement('script');
-    let done = false;
+  const allData = sh.getDataRange().getValues();
+  if (allData.length < 2) return { success: true, data: [], total: 0, source: sh.getName() };
 
-    const cleanup = function() {
-      if (script.parentNode) script.parentNode.removeChild(script);
-      try { delete window[cbName]; } catch(e) {}
-    };
+  // Detectar fila de encabezado real — SEGUIMIENTO tiene 3 filas de título antes de los headers
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(allData.length, 5); i++) {
+    const row = allData[i].join('|').toUpperCase();
+    if (row.includes('NOMBRE') && (row.includes('TELÉFONO') || row.includes('TELEFONO'))) {
+      headerRowIdx = i;
+      break;
+    }
+  }
 
-    const timer = setTimeout(function() {
-      if (!done) {
-        done = true;
-        cleanup();
-        reject(new Error('Timeout (10s) — verifica que el Web App esté publicado'));
-      }
-    }, 10000);
+  const headers = allData[headerRowIdx].map(h => normalizeCol(h));
 
-    window[cbName] = function(data) {
-      if (!done) {
-        done = true;
-        clearTimeout(timer);
-        cleanup();
-        resolve(data);
-      }
-    };
-
-    script.onerror = function() {
-      if (!done) {
-        done = true;
-        clearTimeout(timer);
-        cleanup();
-        reject(new Error('No se pudo cargar el script — verifica la URL'));
-      }
-    };
-
-    const sep = url.includes('?') ? '&' : '?';
-    script.src = url + sep + 'callback=' + cbName;
-    document.head.appendChild(script);
-  });
-}
-
-async function syncCall(payload) {
-  if (!WEBAPP_URL) return; // silent skip — not configured
-  setSyncStatus('syncing');
-  try {
-    // mode: 'no-cors' — el POST llega a GAS y queda registrado en Sheets,
-    // pero la respuesta es opaca (no podemos leerla). Funciona sin CORS.
-    await fetch(WEBAPP_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify(payload)
+  let rows = allData.slice(headerRowIdx + 1)
+    .filter(r => {
+      // Para SEGUIMIENTO col 0 = "#" (número de fila), col 1 = Nombre
+      // Para DIRECTORIO y Prospectos col 0 = Nombre / ID
+      const a = r[0], b = r[1];
+      return (a !== '' && a !== null && a !== undefined) ||
+             (b !== '' && b !== null && b !== undefined);
+    })
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        const val = r[i];
+        obj[h] = (val !== null && val !== undefined) ? val.toString() : '';
+      });
+      return obj;
     });
-    setSyncStatus('ok');
-  } catch (e) {
-    setSyncStatus('error');
-    console.warn('[CC Sync] Network error:', e.message);
+
+  // Para SEGUIMIENTO: filtrar cerrados y ordenar por próximo seguimiento
+  if (mode === 'seguimiento') {
+    const CERRADAS = ['cerrado - ganado', 'cerrado - perdido'];
+    rows = rows.filter(r => {
+      const etapa = (r['Etapa'] || '').toLowerCase().trim();
+      return !CERRADAS.some(c => etapa.includes(c.replace(' - ', ''))) &&
+             !etapa.includes('cerrado');
+    });
+    // Ordenar: contactos con fecha de seguimiento primero (más urgentes), luego sin fecha
+    rows.sort((a, b) => {
+      const da = a['Callback'] ? new Date(a['Callback']) : new Date('9999-12-31');
+      const db = b['Callback'] ? new Date(b['Callback']) : new Date('9999-12-31');
+      return da - db;
+    });
   }
-  setTimeout(() => { if (document.getElementById('sync-label').textContent === '✓ Sincronizado') setSyncStatus('idle'); }, 4000);
+
+  return { success: true, data: rows, total: rows.length, source: sh.getName() };
 }
 
-function saveWebAppUrl() {
-  const url = document.getElementById('config-url').value.trim();
-  WEBAPP_URL = url;
-  localStorage.setItem('cc_webapp_url', url);
-  setSyncStatus(url ? 'idle' : 'none');
-  const el = document.getElementById('config-saved');
-  el.style.display = 'block';
-  setTimeout(() => el.style.display = 'none', 2500);
+// ===== OBTENER CALLBACKS PENDIENTES (devuelve objeto plano) =====
+function getCallbacksData() {
+  const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sh  = ss.getSheetByName(SHEET_LLAMADAS);
+  if (!sh) return { success: true, data: [] };
+
+  const data    = sh.getDataRange().getValues();
+  if (data.length < 2) return { success: true, data: [] };
+
+  const headers = data[0];
+  const now     = new Date();
+
+  const pendientes = data.slice(1).filter(r => {
+    if (!r[11]) return false;
+    try {
+      const d = new Date(r[11]);
+      return !isNaN(d) && d >= now;
+    } catch (e) { return false; }
+  }).map(r => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = r[i] ? r[i].toString() : ''; });
+    return obj;
+  });
+
+  return { success: true, data: pendientes };
 }
 
-async function testConnection() {
-  if (!WEBAPP_URL) {
-    document.getElementById('test-result').textContent = '⚠ Ingresa la URL primero.';
-    return;
-  }
-  document.getElementById('test-result').textContent = '🔄 Probando conexión…';
-  setSyncStatus('syncing');
-  try {
-    const j = await jsonpFetch(WEBAPP_URL + '?action=ping');
-    if (j.success) {
-      setSyncStatus('ok');
-      document.getElementById('test-result').textContent = '✅ Conexión exitosa — ' + (j.message || 'OK');
-    } else {
-      setSyncStatus('error');
-      document.getElementById('test-result').textContent = '❌ Error: ' + (j.error || 'desconocido');
+// ===== ACTUALIZAR CONTACTO EN SEGUIMIENTO (y Prospectos si existe) =====
+// Recibe: nombre, estado, callback (fecha próximo seguimiento), notas
+// Actualiza: ESTADO ACTUAL, ⚡ PRÓXIMO SEGUIMIENTO, # INTENTOS (+1), NOTAS
+function actualizarEstadoProspecto(ss, nombre, estado, callback, notas) {
+  const nombreLower = nombre.toLowerCase().trim();
+
+  // 1. Actualizar SEGUIMIENTO (CRM principal)
+  const shSeg = ss.getSheetByName(SHEET_SEGUIMIENTO);
+  if (shSeg) {
+    const allData = shSeg.getDataRange().getValues();
+
+    // Detectar fila de encabezado (SEGUIMIENTO tiene 3 filas de título antes)
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(allData.length, 5); i++) {
+      const row = allData[i].join('|').toUpperCase();
+      if (row.includes('NOMBRE') && (row.includes('TELÉFONO') || row.includes('TELEFONO'))) {
+        headerRowIdx = i;
+        break;
+      }
     }
-  } catch (e) {
-    setSyncStatus('error');
-    document.getElementById('test-result').textContent = '❌ Error de red: ' + e.message;
-  }
-}
 
-function openConfigPanel() {
-  document.getElementById('config-url').value = WEBAPP_URL;
-  document.getElementById('test-result').textContent = '';
-  document.getElementById('configPanel').classList.add('open');
-  document.getElementById('overlay').classList.add('active');
-}
-function closeConfigPanel() {
-  document.getElementById('configPanel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('active');
-}
+    const headers = allData[headerRowIdx].map(h => (h || '').toString().trim().toUpperCase());
 
-async function loadProspectosFromSheets() {
-  const statusEl = document.getElementById('prospectos-status');
-  if (!WEBAPP_URL) {
-    statusEl.textContent = '⚠ Configura la URL del Web App primero (⚙️ en la barra de navegación).';
-    return;
-  }
-  statusEl.textContent = '🔄 Cargando desde Sheets…';
-  setSyncStatus('syncing');
-  try {
-    const j = await jsonpFetch(WEBAPP_URL + '?action=getProspectos');
-    if (j.success && j.data) {
-      renderProspectosList(j.data);
-      setSyncStatus('ok');
-      const src = j.source ? ` · fuente: ${j.source}` : '';
-      statusEl.textContent = `✅ ${j.data.length} prospecto(s) cargados${src}.`;
-    } else {
-      throw new Error(j.error || 'Sin datos');
-    }
-  } catch (e) {
-    setSyncStatus('error');
-    statusEl.textContent = '❌ Error al cargar: ' + e.message;
-  }
-}
+    // Índices de columnas que vamos a actualizar
+    const iNombre   = headers.indexOf('NOMBRE');
+    const iEstado   = headers.indexOf('ESTADO ACTUAL');
+    const iCallback = headers.findIndex(h => h.includes('PRÓXIMO SEGUIMIENTO') || h.includes('PROXIMO SEGUIMIENTO'));
+    const iIntentos = headers.indexOf('# INTENTOS');
+    const iNotas    = headers.indexOf('NOTAS');
 
-function renderProspectosList(prospectos) {
-  const cont = document.getElementById('prospectos-list');
-  cont.innerHTML = '';
-  if (!prospectos.length) {
-    cont.innerHTML = '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px;">No hay prospectos en la hoja. Agrégalos arriba.</p>';
-    return;
-  }
-  prospectos.forEach(p => {
-    const nombre   = p.Nombre        || p.nombre   || '';
-    const tel      = p.Teléfono      || p.telefono || '';
-    const tipo     = p.Tipo          || p.tipo     || '';  // Vida | Reclutamiento | Propios | ...
-    const estado   = p.Estado        || p.estado   || '';  // Interesado | Volver a llamar | ...
-    const notas    = p.Notas         || p.notas    || '';
-    const ref      = p['Referido Por'] || '';
-    const etapa    = p.Etapa         || '';                // Primera Llamada | Seguimiento Post-Presentación
-    const callback = p.Callback      || '';                // ⚡ Fecha de próximo seguimiento
-    const score    = p.Score         || '';                // 0–5 puntos MACHOE
-    const fuente   = p.Fuente        || '';                // Propios | Keyla R | etc.
-    const intentos = p.Intentos      || '';
-
-    // Color de tipo: Vida=verde, Reclutamiento=naranja, otro=azul
-    const tipoColor = tipo === 'Vida'          ? 'var(--green)'  :
-                      tipo === 'Reclutamiento' ? 'var(--orange)' : 'var(--blue)';
-
-    // Color de estado
-    const estadoColor = estado.toLowerCase().includes('cita') || estado === 'IBA Firmada' ? 'var(--green)' :
-                        estado === 'Pendiente' || estado === 'Muy motivado/a'             ? 'var(--yellow)' :
-                        estado === 'No interesado'                                        ? 'var(--red)' :
-                        'var(--text-muted)';
-
-    // Color de etapa
-    const etapaColor = etapa.includes('Primera') ? 'var(--yellow)' :
-                       etapa.includes('Post')     ? 'var(--blue)'   : 'var(--text-muted)';
-
-    // Referencia a mostrar (ref tiene prioridad sobre fuente)
-    const refLabel = ref || fuente;
-
-    // Score visual (solo si tiene valor)
-    const scoreHtml = score ? `<span style="font-size:10px;color:var(--yellow);margin-left:6px;">⭐${score}</span>` : '';
-    const intentosHtml = intentos ? `<span style="font-size:10px;color:var(--text-muted);">· ${intentos}✉️</span>` : '';
-
-    const card = document.createElement('div');
-    card.className = 'prospecto-card';
-    card.innerHTML = `
-      <div class="pc-name">${nombre}${scoreHtml}</div>
-      <div class="pc-meta">
-        ${tel      ? `📱 ${tel}` : '<span style="color:var(--red);font-size:10px;">Sin tel</span>'}
-        ${tipo     ? `· <span style="color:${tipoColor};font-weight:700;">${tipo}</span>` : ''}
-        ${refLabel ? `· <span style="color:var(--text-dim);">👤 ${refLabel}</span>` : ''}
-        ${intentosHtml}
-        ${estado   ? `<span class="pc-estado" style="color:${estadoColor};">${estado}</span>` : ''}
-      </div>
-      ${etapa    ? `<div style="font-size:10px;color:${etapaColor};margin-top:3px;">📊 ${etapa}</div>` : ''}
-      ${callback ? `<div style="font-size:10px;color:var(--yellow);margin-top:2px;">📅 Sgte: ${callback}</div>` : ''}
-      ${notas    ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-style:italic;">${notas}</div>` : ''}
-    `;
-    card.onclick = () => {
-      // Pre-fill pending data so loadScript can pick it up
-      S.pendingName  = nombre;
-      S.pendingPhone = tel;
-      showScreen('type-selector');
-    };
-    cont.appendChild(card);
-  });
-}
-
-async function addProspectoManual() {
-  const nombre = document.getElementById('new-nombre').value.trim();
-  const tel    = document.getElementById('new-tel').value.trim();
-  const tipo   = document.getElementById('new-tipo').value;
-  const ref    = document.getElementById('new-ref').value.trim();
-  if (!nombre) { alert('El nombre es obligatorio.'); return; }
-  await syncCall({
-    action: 'addProspecto',
-    nombre, telefono: tel, tipo, referidoPor: ref
-  });
-  document.getElementById('new-nombre').value = '';
-  document.getElementById('new-tel').value    = '';
-  document.getElementById('new-ref').value    = '';
-  const ok = document.getElementById('prospecto-added');
-  ok.style.display = 'block';
-  setTimeout(() => ok.style.display = 'none', 2500);
-  // Reload list from Sheets after short delay
-  setTimeout(() => loadProspectosFromSheets(), 1800);
-}
-
-// ===== STATE =====
-let S = {
-  currentType: null, scriptKey: null, step: 0,
-  timerStart: null, timerInterval: null,
-  pendingName: null, pendingPhone: null,
-  session: { calls:0, citas:0, noInt:0, noContest:0 }
-};
-
-// ===== SCREEN NAV =====
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-'+id).classList.add('active');
-  if (id === 'call') startTimer(); else stopTimer();
-  if (id !== 'result') document.getElementById('callbackForm').style.display = 'none';
-}
-
-// ===== TYPE SELECTION =====
-function selectType(type) {
-  S.currentType = type;
-  const g = GUIDANCE[type];
-  document.getElementById('guidance-subtitle').textContent = g.sub;
-  const cont = document.getElementById('guidanceOptions');
-  cont.innerHTML = '';
-  g.opts.forEach(opt => {
-    const d = document.createElement('div');
-    d.className = 'guidance-card';
-    let msgHTML = opt.msg ? `<div class="msg-template">${opt.msg}</div>` : '';
-    d.innerHTML = `<h4>${opt.icon} ${opt.title}</h4><p>${opt.desc}</p>${msgHTML}`;
-    if (opt.action) d.onclick = opt.action;
-    cont.appendChild(d);
-  });
-  showScreen('guidance');
-}
-
-function showScripts(type) {
-  const keys = TYPE_MAP[type];
-  if (keys.length === 1) { loadScript(keys[0]); return; }
-  const cont = document.getElementById('scriptOptions');
-  cont.innerHTML = '';
-  keys.forEach(k => {
-    const sc = SCRIPTS[k];
-    const d = document.createElement('div');
-    d.className = 'script-option';
-    d.innerHTML = `<div class="s-name">${sc.name}</div><div class="s-desc">${sc.type}</div>`;
-    d.onclick = () => loadScript(k);
-    cont.appendChild(d);
-  });
-  showScreen('script-selector');
-}
-
-// ===== LOAD SCRIPT =====
-function loadScript(key) {
-  S.scriptKey = key; S.step = 0;
-  const sc = SCRIPTS[key];
-  document.getElementById('call-script-tag').textContent = sc.name;
-  document.getElementById('call-type-tag').textContent = sc.type;
-  renderStepsNav(); renderStep();
-  renderObjPanel(); renderSidebarObjs();
-  // Pre-fill from prospecto card if available, otherwise clear
-  document.getElementById('prospectName').value = S.pendingName || '';
-  document.getElementById('prospectPhone').value = S.pendingPhone || '';
-  document.getElementById('result-name').textContent = '';
-  S.pendingName = null; S.pendingPhone = null;
-  S.session.calls++;
-  updateNavStats(); updateSidebarStats();
-  showScreen('call');
-}
-
-// ===== SCRIPT RENDERING =====
-function renderStepsNav() {
-  const steps = SCRIPTS[S.scriptKey].steps;
-  const nav = document.getElementById('stepsNav');
-  nav.innerHTML = '';
-  steps.forEach((s, i) => {
-    const p = document.createElement('div');
-    p.className = 'step-pill' + (i === S.step ? ' active' : (i < S.step ? ' done' : ''));
-    p.textContent = 'P' + (i+1);
-    p.title = s.label;
-    p.onclick = () => { S.step = i; renderStep(); };
-    nav.appendChild(p);
-  });
-}
-
-function renderStep() {
-  const step = SCRIPTS[S.scriptKey].steps[S.step];
-  const name = document.getElementById('prospectName').value || '[NOMBRE]';
-  let text = step.text;
-  text = text.replace(/\[NOMBRE\]/g, `<span class="hl">${name}</span>`);
-  text = text.replace(/\[PAUSA[^\]]*\]/g, m => `<span class="pause">${m}</span>`);
-  text = text.replace(/(HOY|MAÑANA|WFA|indispensable|⭐)/g, '<span class="hl">$1</span>');
-  document.getElementById('stepLabel').textContent = step.label;
-  document.getElementById('stepText').innerHTML = text;
-  renderStepsNav();
-}
-
-function nextStep() { const sc = SCRIPTS[S.scriptKey]; if (S.step < sc.steps.length-1) { S.step++; renderStep(); } }
-function prevStep() { if (S.step > 0) { S.step--; renderStep(); } }
-
-function onProspectNameChange() {
-  const name = document.getElementById('prospectName').value;
-  document.getElementById('result-name').textContent = name ? `Prospecto: ${name}` : '';
-  document.getElementById('wa-nombre').value = name;
-  renderStep(); updateWA();
-}
-
-// ===== OBJECTIONS =====
-function renderObjPanel() {
-  const list = document.getElementById('objList');
-  list.innerHTML = '';
-  OBJECTIONS.forEach((obj, i) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'obj-item';
-    wrap.innerHTML = `
-      <button class="obj-trigger-btn" onclick="toggleObj(this,${i})">${obj.trigger}</button>
-      <div class="obj-response" id="objr-${i}">${obj.resp}</div>
-    `;
-    list.appendChild(wrap);
-  });
-}
-
-function toggleObj(btn, i) {
-  const resp = document.getElementById('objr-'+i);
-  const isOpen = resp.style.display === 'block';
-  // Close all
-  OBJECTIONS.forEach((_, j) => {
-    const r = document.getElementById('objr-'+j);
-    if (r) r.style.display = 'none';
-    const b = r ? r.previousElementSibling : null;
-    if (b) b.classList.remove('expanded');
-  });
-  if (!isOpen) {
-    resp.style.display = 'block';
-    btn.classList.add('expanded');
-  }
-}
-
-function renderSidebarObjs() {
-  const cont = document.getElementById('sidebarObjBtns');
-  cont.innerHTML = '';
-  OBJECTIONS.forEach((obj, i) => {
-    const b = document.createElement('button');
-    b.className = 'sidebar-obj-btn';
-    b.textContent = obj.trigger.replace(/"/g,'').split(' / ')[0];
-    b.onclick = () => {
-      openObjPanel();
-      setTimeout(() => {
-        const r = document.getElementById('objr-'+i);
-        if (r) {
-          // Close all, open this one
-          OBJECTIONS.forEach((_,j) => { const el=document.getElementById('objr-'+j); if(el) el.style.display='none'; });
-          r.style.display = 'block';
-          r.scrollIntoView({behavior:'smooth'});
+    // Buscar fila del contacto (empieza después del header)
+    for (let i = headerRowIdx + 1; i < allData.length; i++) {
+      const filaVal = ((iNombre >= 0 ? allData[i][iNombre] : allData[i][1]) || '').toString().toLowerCase().trim();
+      if (filaVal === nombreLower) {
+        const rowNum = i + 1; // Sheets es 1-indexed
+        if (iEstado   >= 0 && estado)   shSeg.getRange(rowNum, iEstado   + 1).setValue(estado);
+        if (iCallback >= 0 && callback) shSeg.getRange(rowNum, iCallback + 1).setValue(callback);
+        if (iNotas    >= 0 && notas) {
+          const notaActual = (allData[i][iNotas] || '').toString().trim();
+          const tz   = Session.getScriptTimeZone();
+          const hoy  = Utilities.formatDate(new Date(), tz, 'MM/dd');
+          const nuevaNota = notaActual ? notaActual + ' | ' + hoy + ': ' + notas : hoy + ': ' + notas;
+          shSeg.getRange(rowNum, iNotas + 1).setValue(nuevaNota);
         }
-      }, 320);
-    };
-    cont.appendChild(b);
-  });
-}
-
-function openObjPanel() {
-  document.getElementById('objPanel').classList.add('open');
-  document.getElementById('overlay').classList.add('active');
-}
-function closeObjPanel() {
-  document.getElementById('objPanel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('active');
-}
-function closeAllPanels() {
-  document.getElementById('objPanel').classList.remove('open');
-  document.getElementById('buzonPanel').classList.remove('open');
-  document.getElementById('configPanel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('active');
-}
-
-// ===== TIMER =====
-function startTimer() {
-  S.timerStart = Date.now(); stopTimer();
-  S.timerInterval = setInterval(() => {
-    const e = Math.floor((Date.now()-S.timerStart)/1000);
-    document.getElementById('callTimer').textContent = Math.floor(e/60)+':'+(e%60).toString().padStart(2,'0');
-  }, 1000);
-}
-function stopTimer() { if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; } }
-
-// ===== RESULT =====
-function goToResult() {
-  document.getElementById('result-name').textContent = document.getElementById('prospectName').value ? 'Prospecto: '+document.getElementById('prospectName').value : '';
-  showScreen('result');
-}
-
-function logResult(type) {
-  const _nombre = document.getElementById('prospectName').value || '';
-  const _tel    = document.getElementById('prospectPhone').value || '';
-  const _guion  = S.scriptKey && SCRIPTS[S.scriptKey] ? SCRIPTS[S.scriptKey].name : '';
-  document.getElementById('callbackForm').style.display = 'none';
-  if (type === 'cita' || type === 'objecion-cita') {
-    S.session.citas++;
-    updateNavStats(); updateSidebarStats();
-    const name = _nombre;
-    document.getElementById('wa-nombre').value = name;
-    const now = new Date();
-    const days=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    document.getElementById('wa-fecha').value = `${days[now.getDay()]} ${now.getDate()} de ${months[now.getMonth()]}`;
-    document.getElementById('wa-hora').value = '';
-    document.getElementById('wa-zoom').value = '';
-    // Store for final sync when user finishes the WA screen
-    S._pendingCita = { nombre: _nombre, telefono: _tel, tipo: S.currentType || '', guion: _guion };
-    updateWA();
-    showScreen('whatsapp');
-    return;
+        if (iIntentos >= 0) {
+          const actual = parseInt(allData[i][iIntentos] || '0', 10) || 0;
+          shSeg.getRange(rowNum, iIntentos + 1).setValue(actual + 1);
+        }
+        SpreadsheetApp.flush();
+        break;
+      }
+    }
   }
-  if (type === 'llamar-despues') {
-    // Sync happens in confirmCallback with the datetime
-    S._pendingCallback = { nombre: _nombre, telefono: _tel, tipo: S.currentType || '', guion: _guion };
-    document.getElementById('callbackForm').style.display = 'block';
-    return;
+
+  // 2. Actualizar tab Prospectos si existe (fallback / duplicado)
+  const shPros = ss.getSheetByName(SHEET_PROSPECTOS);
+  if (shPros) {
+    const data = shPros.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const fila = (data[i][1] || '').toString().toLowerCase().trim();
+      if (fila === nombreLower) {
+        shPros.getRange(i + 1, 6).setValue(estado); // Col F = Estado
+        break;
+      }
+    }
   }
-  // All other results: sync immediately
-  syncCall({
-    action: 'logCall',
-    nombre: _nombre,
-    telefono: _tel,
-    tipo: S.currentType || '',
-    estado: type,
-    guion: _guion
-  });
-  if (type === 'no-interesado') S.session.noInt++;
-  else if (type === 'no-contesto') S.session.noContest++;
-  updateNavStats(); updateSidebarStats();
-  setTimeout(() => showScreen('type-selector'), 600);
 }
 
-function confirmCallback() {
-  const cbDT   = document.getElementById('callbackDT').value || '';
-  const cbNote = document.getElementById('callbackNote').value || '';
-  const p = S._pendingCallback || {};
-  syncCall({
-    action: 'logCall',
-    nombre: p.nombre || '',
-    telefono: p.telefono || '',
-    tipo: p.tipo || '',
-    estado: 'llamar-despues',
-    guion: p.guion || '',
-    callback: cbDT,
-    notas: cbNote
-  });
-  S._pendingCallback = null;
-  updateNavStats(); updateSidebarStats();
-  showScreen('type-selector');
+// ===== CREAR HOJA SI NO EXISTE =====
+function getOrCreateSheet(ss, nombre, headers) {
+  let sh = ss.getSheetByName(nombre);
+  if (!sh) {
+    sh = ss.insertSheet(nombre);
+    sh.appendRow(headers);
+    // Formato del encabezado
+    const rng = sh.getRange(1, 1, 1, headers.length);
+    rng.setFontWeight('bold');
+    rng.setBackground('#0f172a');
+    rng.setFontColor('#00d46a');
+    sh.setFrozenRows(1);
+    // Ancho automático de columnas
+    for (let c = 1; c <= headers.length; c++) {
+      sh.autoResizeColumn(c);
+    }
+    SpreadsheetApp.flush();
+  }
+  return sh;
 }
 
-// ===== STATS =====
-function updateNavStats() {
-  const {calls, citas} = S.session;
-  document.getElementById('nav-calls').textContent = calls;
-  document.getElementById('nav-citas').textContent = citas;
-  document.getElementById('nav-conv').textContent = calls > 0 ? Math.round(citas/calls*100)+'%' : '0%';
-}
-function updateSidebarStats() {
-  document.getElementById('sess-calls').textContent = S.session.calls;
-  document.getElementById('sess-citas').textContent = S.session.citas;
-  document.getElementById('sess-no').textContent = S.session.noInt;
-  document.getElementById('sess-nc').textContent = S.session.noContest;
+// ===== HELPERS JSON =====
+function jsonOk(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: true, ...obj }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ===== WHATSAPP =====
-function updateWA() {
-  const nombre = document.getElementById('wa-nombre').value || '[NOMBRE]';
-  const fecha  = document.getElementById('wa-fecha').value || '[DÍA Y FECHA]';
-  const hora   = document.getElementById('wa-hora').value || '[HORA]';
-  const zoom   = document.getElementById('wa-zoom').value || '[LINK DE ZOOM]';
-  document.getElementById('waPreview1').textContent =
-`¡Listo, ${nombre}! Ya quedó separado nuestro espacio de 10 minutos para el ${fecha} a las ${hora}. ¡Un saludo!`;
-  document.getElementById('waPreview2').textContent =
-`Hola, ${nombre}. Te habla Miguel Romero. Te escribo rápido para confirmar que ya tengo separado nuestro espacio de 10 minutos hoy a las ${hora}. Te comparto por aquí el link para conectarnos: ${zoom}. ¡Saludos!`;
+function jsonError(msg) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: false, error: msg }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
-
-function copyWA1() {
-  navigator.clipboard.writeText(document.getElementById('waPreview1').textContent).then(() => {
-    const c = document.getElementById('copyConfirm1');
-    c.style.display = 'block';
-    setTimeout(() => c.style.display = 'none', 3000);
-  });
-}
-
-function copyWA2() {
-  navigator.clipboard.writeText(document.getElementById('waPreview2').textContent).then(() => {
-    const c = document.getElementById('copyConfirm2');
-    c.style.display = 'block';
-    setTimeout(() => c.style.display = 'none', 3000);
-  });
-}
-
-// ===== BUZÓN PANEL =====
-function openBuzonPanel() {
-  S.session.noContest++;
-  updateNavStats(); updateSidebarStats();
-  const name = document.getElementById('prospectName').value || '[NOMBRE]';
-  syncCall({
-    action: 'logCall',
-    nombre: name !== '[NOMBRE]' ? name : '',
-    telefono: document.getElementById('prospectPhone').value || '',
-    tipo: S.currentType || '',
-    estado: 'no-contesto-buzon',
-    guion: S.scriptKey && SCRIPTS[S.scriptKey] ? SCRIPTS[S.scriptKey].name : ''
-  });
-  document.getElementById('buzonText1').textContent =
-    `Hola ${name}, te llamé rápido pero imagino que andas a mil. Te dejo un gran saludo por aquí. Miguel Romero.`;
-  document.getElementById('buzonText2').textContent =
-    `Hola ${name}, te habla Miguel Romero. Te marqué rápido por la información del sistema digital. Avísame cuando te quede libre un minuto y lo revisamos. ¡Saludos!`;
-  document.getElementById('buzonPanel').classList.add('open');
-  document.getElementById('overlay').classList.add('active');
-}
-
-function closeBuzonPanel() {
-  document.getElementById('buzonPanel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('active');
-}
-
-function closeBuzonGoNext() {
-  closeBuzonPanel();
-  showScreen('type-selector');
-}
-
-function copyBuzon(n) {
-  const text = document.getElementById('buzonText' + n).textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const c = document.getElementById('buzonConfirm' + n);
-    c.style.display = 'block';
-    setTimeout(() => c.style.display = 'none', 3000);
-  });
-}
-
-function nextCall() {
-  // Sync cita with final appointment details
-  const p = S._pendingCita || {};
-  syncCall({
-    action: 'logCall',
-    nombre: document.getElementById('wa-nombre').value || p.nombre || '',
-    telefono: p.telefono || '',
-    tipo: p.tipo || '',
-    estado: 'cita-agendada',
-    guion: p.guion || '',
-    fechaCita: document.getElementById('wa-fecha').value || '',
-    horaCita:  document.getElementById('wa-hora').value  || '',
-    linkZoom:  document.getElementById('wa-zoom').value  || ''
-  });
-  S._pendingCita = null;
-  showScreen('type-selector');
-}
-
-// ===== DIAGNOSTIC =====
-function diagAnswer(btn, cat, ans) {
-  btn.parentElement.querySelectorAll('.diag-btn').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-  const si = document.getElementById('diag-'+cat+'-si');
-  const no = document.getElementById('diag-'+cat+'-no');
-  if (si) si.style.display = 'none';
-  if (no) no.style.display = 'none';
-  const target = document.getElementById('diag-'+cat+'-'+ans);
-  if (target) target.style.display = 'block';
-}
-
-function toggleSubBtn(btn) {
-  btn.classList.toggle('selected');
-}
-
-// ===== INIT =====
-updateWA();
-// Initialize sync status from stored URL
-setSyncStatus(WEBAPP_URL ? 'idle' : 'none');
-// Ensure confirm elements start hidden
-['buzonConfirm1','buzonConfirm2','copyConfirm1','copyConfirm2','config-saved','prospecto-added'].forEach(id => {
-  const el = document.getElementById(id); if (el) el.style.display = 'none';
-});
-</script>
-</body>
-</html>
