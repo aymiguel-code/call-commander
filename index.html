@@ -1083,7 +1083,7 @@ function jsonpFetch(url) {
     };
 
     const sep = url.includes('?') ? '&' : '?';
-    script.src = url + sep + 'cb=' + cbName; // 'cb' evita conflicto con campo 'callback' (fecha de seguimiento)
+    script.src = url + sep + 'callback=' + cbName;
     document.head.appendChild(script);
   });
 }
@@ -1505,7 +1505,7 @@ function confirmCallback() {
     tipo: p.tipo || '',
     estado: 'llamar-despues',
     guion: p.guion || '',
-    callback: cbDT,
+    sig: cbDT,
     notas: cbNote
   });
   S._pendingCallback = null;
