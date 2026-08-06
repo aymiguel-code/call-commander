@@ -382,6 +382,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="tc-name">Contacto Frío Personal</div>
       <div class="tc-desc">Conocido casual — tienes el número, poca relación activa</div>
     </div>
+    <div class="type-card" onclick="selectType('reactivacion-pres')" style="border-color:#7c3aed44;">
+      <div class="tc-emoji">🔄</div>
+      <div class="tc-name">Reactivación PRES</div>
+      <div class="tc-desc">Vio la presentación — no cerró · 76 pendientes en KTA</div>
+    </div>
+    <div class="type-card" onclick="selectType('agendamiento-pendiente')" style="border-color:#0ea5e944;">
+      <div class="tc-emoji">📅</div>
+      <div class="tc-name">Cierre de Cita</div>
+      <div class="tc-desc">Calificó positivo — nunca confirmó su cita</div>
+    </div>
   </div>
 </div>
 
@@ -470,7 +480,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <h2>¿QUÉ PASÓ EN LA LLAMADA?</h2>
     <p id="result-name" style="color:var(--green);font-weight:700;font-size:17px;margin-top:8px;"></p>
   </div>
-  <div class="result-grid">
+  <div class="result-grid" id="resultGrid">
     <div class="result-btn" style="border-color:var(--green);background:rgba(0,212,106,.08);" onclick="logResult('cita')">
       <div class="result-emoji">✅</div><span class="result-label" style="color:var(--green);">Cita Agendada</span>
     </div>
@@ -567,6 +577,19 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </div>
       <div class="wa-preview" id="waPreview2"></div>
       <div class="copy-confirm" id="copyConfirm2">✅ ¡Mensaje 2 copiado!</div>
+    </div>
+
+    <!-- BLOQUE 3 — REACTIVACIÓN PRES (visible solo en Pilar 3) -->
+    <div id="wa-block3" style="display:none;margin-bottom:24px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:12px;">
+        <div>
+          <div class="wa-preview-label" style="color:#a78bfa;">🔄 CONFIRMACIÓN REACTIVACIÓN — Actualización de Diagnóstico</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Pilar 3 · Enviar ~10 min después de agendar · Requiere cámara encendida</div>
+        </div>
+        <button class="btn btn-sm" style="background:#7c3aed22;border:1px solid #7c3aed66;color:#a78bfa;white-space:nowrap;flex-shrink:0;" onclick="copyWA3()">📋 Copiar</button>
+      </div>
+      <div class="wa-preview" id="waPreview3" style="background:#2d1b4e;border:1px solid #7c3aed33;"></div>
+      <div class="copy-confirm" id="copyConfirm3">✅ ¡Mensaje de Reactivación copiado!</div>
     </div>
 
     <div class="wa-actions">
@@ -923,6 +946,53 @@ const SCRIPTS = {
       { label: 'PASO 3 — CURIOSIDAD SIN REVELAR ⭐', text: 'Mira, encontré algo que vale la pena ver. Son solo 10 minutos por Zoom para mostrarte un sistema muy visual — no te cuento más por teléfono para no quitarte tiempo. ¿HOY o MAÑANA te queda mejor?' },
       { label: 'PASO 4 — FILTRO PAREJA WFA', text: 'Excelente. Lo ideal es que estés con tu pareja para que vean el sistema juntos y a mí la sesión me cuente por dos. ¿Les queda mejor hoy o mañana?' },
     ]
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // PILAR 3 — REACTIVACIÓN PRES SIN CIERRE
+  // ─────────────────────────────────────────────────────────────
+  'reactivacion-a': {
+    name: 'Reactivación Variante A — Protección',
+    type: 'Pilar 3 · PRES sin Cierre · Ángulo Financiero',
+    steps: [
+      { label: 'PASO 1 — APERTURA CÁLIDA', text: 'Hola [NOMBRE], ¿cómo estás? Te habla Miguel Romero. Oye, te llamo rápido porque hace un tiempo revisamos juntos un análisis financiero de tu familia y quería actualizarte algo que me parece importante para tu situación específica.' },
+      { label: 'PASO 2 — ANCLA AL DIAGNÓSTICO PREVIO', text: 'Cuando hicimos ese diagnóstico detectamos algunos puntos clave en tu caso. El sistema que usamos para proteger a las familias ha mejorado mucho, y los datos del mercado cambiaron. Hay algo en tu análisis que vale la pena revisar juntos de nuevo.' },
+      { label: 'PASO 3 — PROPUESTA SIN PRESIÓN', text: 'No te pido más que 10 minutos por Zoom para actualizar tu diagnóstico con los números actuales. No es una presentación nueva — es solo revisar cómo quedó tu situación con la información de hoy.' },
+      { label: 'PASO 4 — CIERRE + FILTRO PAREJA WFA ⭐', text: '¿Te queda mejor HOY al final de la tarde o MAÑANA en la mañana?\n\n[Si aplica — pareja]: Lo ideal es que estés con tu pareja para que la actualización la vean juntos y a mí la sesión me cuente por dos. ¿Les queda mejor hoy o mañana?' },
+    ]
+  },
+  'reactivacion-b': {
+    name: 'Reactivación Variante B — Negocio',
+    type: 'Pilar 3 · PRES sin Cierre · Ángulo de Expansión',
+    steps: [
+      { label: 'PASO 1 — APERTURA DE OPORTUNIDAD', text: 'Hola [NOMBRE], ¿cómo estás? Te habla Miguel Romero. Te marco rápido porque hubo un cambio importante en el proyecto que te mostré hace un tiempo y quería comentártelo directamente contigo.' },
+      { label: 'PASO 2 — GANCHO DE EXPANSIÓN', text: 'La empresa abrió una nueva fase de crecimiento en esta área y estamos buscando personas que ya vieron el sistema y que tengan el perfil para entrar en esta etapa. Me acordé de ti de inmediato porque la conversación que tuvimos me pareció que tenías exactamente el pensamiento que necesitamos.' },
+      { label: 'PASO 3 — PROPUESTA DE REVISIÓN FRESCA', text: 'Son solo 10 minutos por Zoom para que veas en qué cambió el modelo desde la última vez que hablamos. No es una presentación de cero — es una actualización concreta de la oportunidad.' },
+      { label: 'PASO 4 — CIERRE + FILTRO PAREJA WFA ⭐', text: '¿Tienes espacio HOY en la tarde o MAÑANA temprano?\n\n[Si aplica — pareja]: Lo ideal es que estés con tu pareja para que vean la actualización juntos. ¿Cuál horario les funciona mejor?' },
+    ]
+  },
+  'reactivacion-cruzado': {
+    name: 'Reactivación Gancho Cruzado',
+    type: 'Pilar 3 · PRES sin Cierre · Variante Universal',
+    steps: [
+      { label: 'PASO 1 — APERTURA NEUTRAL', text: 'Hola [NOMBRE], ¿cómo estás? Te habla Miguel Romero. Oye, hace un tiempo revisamos algo juntos y te llamo rápido porque hay una actualización que quiero que veas — son solo 10 minutos por Zoom.' },
+      { label: 'PASO 2 — GANCHO CRUZADO', text: 'El sistema que te mostré tiene dos lados: el de proteger a tu familia financieramente, y el de generar ingresos extra desde casa. Dependiendo de lo que te interese más en este momento, vemos uno o el otro — tú decides al conectarnos.' },
+      { label: 'PASO 3 — CIERRE + FILTRO PAREJA WFA ⭐', text: '¿Qué horario te queda mejor, HOY al final del día o MAÑANA en la mañana?\n\n[Si aplica — pareja]: Lo ideal es que estés con tu pareja para ver la actualización juntos — a mí la cita me cuenta por dos. ¿Hoy o mañana les funciona mejor a los dos?' },
+    ]
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // PILAR 4 — CIERRE DE CITA PENDIENTE
+  // ─────────────────────────────────────────────────────────────
+  'agendamiento-pendiente': {
+    name: 'Cierre de Cita Pendiente',
+    type: 'Pilar 4 · Contacto Calificado · Tono Cordial',
+    steps: [
+      { label: 'PASO 1 — APERTURA CORDIAL', text: 'Hola [NOMBRE], ¿cómo estás? Te habla Miguel Romero. Oye, te llamo porque quedamos en coordinar un espacio para revisar algo juntos y quería ver si ya tienes un hueco disponible.' },
+      { label: 'PASO 2 — REFERENCIA A LA CONVERSACIÓN PREVIA', text: 'La última vez que hablamos quedó muy claro que esto podía tener sentido para ti. Solo quiero asegurarme de que tengas la información completa antes de tomar cualquier decisión — por eso no me olvidé de llamarte.' },
+      { label: 'PASO 3 — PROPUESTA SIN PRESIÓN', text: 'Son solo 10 minutos por Zoom, muy al grano. Tú llegas, ves los números de tu caso y, si te sirve, avanzamos; si no, quedamos como amigos y no pasa nada. Sin ningún compromiso.' },
+      { label: 'PASO 4 — CIERRE SUAVE + FILTRO PAREJA WFA ⭐', text: '¿Cuándo tienes un momento libre — HOY o MAÑANA te queda bien?\n\n[Si aplica — pareja]: Si tu pareja puede estar presente, mejor todavía — así tienen toda la información juntos y a mí la cita me cuenta por dos. ¿Les queda bien hoy o mañana?' },
+    ]
   }
 };
 
@@ -932,7 +1002,9 @@ const TYPE_MAP = {
   'redes-sociales': ['redes'],
   'base-datos': ['bd-auditoria','bd-tarjetas','bd-cobertura'],
   'reclutamiento': ['rec-expansion','rec-gancho'],
-  'frio-personal': ['frio-personal']
+  'frio-personal': ['frio-personal'],
+  'reactivacion-pres': ['reactivacion-a','reactivacion-b','reactivacion-cruzado'],
+  'agendamiento-pendiente': ['agendamiento-pendiente']
 };
 
 const GUIDANCE = {
@@ -974,6 +1046,20 @@ const GUIDANCE = {
     sub: 'Contacto Frío Personal — conocido casual, sin relación activa',
     opts: [
       { icon:'📞', title:'Llamar directo', desc:'Tienes su número. Usa el guion de contacto frío personal — 4 pasos, sin revelar la empresa, objetivo único: conseguir la cita.', action: () => loadScript('frio-personal') }
+    ]
+  },
+  'reactivacion-pres': {
+    sub: 'Pilar 3 — Reactivación PRES sin Cierre · Elige la variante adecuada',
+    opts: [
+      { icon:'🛡️', title:'Variante A — Protección / Números', desc:'Para quien respondió más al ángulo financiero o de protección familiar. Reconecta como actualización del diagnóstico.', action: () => loadScript('reactivacion-a') },
+      { icon:'💼', title:'Variante B — Oportunidad de Negocio', desc:'Para quien mostró interés en el lado del negocio / ingresos extra. Reconecta con el gancho de expansión.', action: () => loadScript('reactivacion-b') },
+      { icon:'🔀', title:'Gancho Cruzado — No sé cuál prefiere', desc:'Cuando no recuerdas qué ángulo resonó más. El guion sondea en vivo y el prospecto elige su dirección.', action: () => loadScript('reactivacion-cruzado') }
+    ]
+  },
+  'agendamiento-pendiente': {
+    sub: 'Pilar 4 — Cierre de Cita Pendiente · Tono cálido, sin presión',
+    opts: [
+      { icon:'📞', title:'Llamar directamente', desc:'Ya tuvieron una conversación positiva. El contacto calificó. Llama para concretar la cita con tono cordial — sin urgencia ni escasez.', action: () => loadScript('agendamiento-pendiente') }
     ]
   }
 };
@@ -1020,6 +1106,73 @@ const OBJECTIONS = [
     resp: '— RECONOCER: "Te entiendo por completo, el presupuesto de la casa siempre hay que cuidarlo."\n\n— ASOCIAR: "De hecho, todo el mundo me pregunta lo mismo antes de conectarse. El espacio de 10 minutos es puramente educativo e informativo, no te va a costar absolutamente nada."\n\n— PREGUNTAR: "Sabiendo que es 100% gratuito y sin ningún compromiso de tu parte, ¿nos vemos hoy o mañana?"'
   }
 ];
+
+// ===== OBJECTIONS POR CAMPAÑA =====
+// Mapeadas por scriptKey. Si no existe entrada, se usan las OBJECTIONS globales.
+const OBJECTIONS_MAP = {
+  'reactivacion-a': [
+    {
+      trigger: '"¿Por qué me llamas ahora?"',
+      resp: '— RECONOCER: "Totalmente válido, [NOMBRE]. Hace tiempo que no hablamos."\n\n— ASOCIAR: "La razón es concreta: el sistema tiene información nueva y los números del mercado cambiaron desde la última vez que revisamos tu caso. Las personas que ya vieron el análisis son exactamente las que más se benefician de la actualización."\n\n— PREGUNTAR: "¿Cuándo tienes 10 minutos libres, hoy o mañana, para ver los cambios específicos de tu situación?"'
+    },
+    {
+      trigger: '"No tengo dinero ahora mismo"',
+      resp: '— RECONOCER: "Lo entiendo perfectamente, y lo respeto."\n\n— ASOCIAR: "Precisamente por eso vale la pena ver la actualización — la herramienta detecta dónde exactamente se está yendo el dinero sin que te des cuenta. Las familias que sienten que no tienen no son las que menos pueden hacer; son las que más necesitan ver el diagnóstico."\n\n— PREGUNTAR: "¿Me permites mostrarte los números actualizados en 10 minutos? Tú decides después. ¿Hoy o mañana?"'
+    },
+    {
+      trigger: '"Ya tengo seguro del trabajo"',
+      resp: '— RECONOCER: "Qué bien, eso es mejor que nada, de verdad."\n\n— ASOCIAR: "El problema con el seguro del trabajo es que te protege mientras tienes ese trabajo. Aquí el mercado laboral está muy volátil — si mañana hay un recorte, la familia queda desprotegida de inmediato. Las familias más preparadas tienen una cobertura propia que no depende del empleador."\n\n— PREGUNTAR: "¿Le echas un vistazo a los números de tu caso para ver qué tan fuerte está realmente tu protección actual? Son 10 minutos. ¿Hoy o mañana?"'
+    },
+    {
+      trigger: '"No me acuerdo de lo que vimos"',
+      resp: '— RECONOCER: "Normal, fue hace tiempo y todos andamos a mil."\n\n— ASOCIAR: "De hecho, eso es exactamente lo que pasa cuando no se cierra en el momento — la información se olvida y la familia queda sin protección real. Esta llamada es para refrescar los puntos clave de tu caso, no para empezar de cero."\n\n— PREGUNTAR: "¿Nos conectamos 10 minutos para que veas el resumen de tus números? ¿Hoy o mañana te queda mejor?"'
+    },
+    {
+      trigger: '"Mándame la información por mensaje"',
+      resp: '— RECONOCER: "Con gusto, entiendo que prefieres revisar a tu ritmo."\n\n— ASOCIAR: "El asunto es que el análisis de tu caso tiene números específicos — tu edad, tu ingreso, tu familia — y eso no se puede explicar bien en un texto. Las personas que más entienden el valor son las que lo ven en la pantalla con sus propios números."\n\n— PREGUNTAR: "¿Me das 10 minutos por Zoom para que lo veas tú mismo en tiempo real? ¿Hoy o mañana te queda mejor?"'
+    }
+  ],
+  'reactivacion-b': [
+    {
+      trigger: '"Ya vi eso antes"',
+      resp: '— RECONOCER: "Sí, y por eso exactamente te llamo — porque lo que viste ya cambió."\n\n— ASOCIAR: "El sistema que te mostré antes era una versión anterior. En esta nueva fase, la estructura de ingresos y el plan de carrera tienen condiciones completamente diferentes. Las personas que ya lo vieron una vez son las que más rápido captan el cambio."\n\n— PREGUNTAR: "¿Me das 10 minutos para que veas exactamente qué cambió? ¿Hoy o mañana te queda mejor?"'
+    },
+    {
+      trigger: '"No tengo tiempo"',
+      resp: '— RECONOCER: "Totalmente, te entiendo — el tiempo es lo más valioso que tienes."\n\n— ASOCIAR: "Por eso mismo las personas que más generan con este sistema son las que menos tiempo libre tienen — saben que 10 minutos bien invertidos cambian el panorama."\n\n— PREGUNTAR: "Son literalmente 10 minutos al grano. ¿Qué te queda mejor, hoy al final del día o mañana temprano?"'
+    },
+    {
+      trigger: '"¿Esto es venta de seguros?"',
+      resp: '— RECONOCER: "Es una pregunta válida y me alegra que la hagas."\n\n— ASOCIAR: "El proyecto tiene un componente de protección financiera, sí, pero lo que te estoy llamando a mostrar es el lado del negocio — cómo construir un sistema de ingresos propios. Los líderes que más avanzan no son vendedores, son Representantes Independientes."\n\n— PREGUNTAR: "¿Me das 10 minutos para que veas el modelo completo del negocio, no solo el producto? ¿Hoy o mañana?"'
+    },
+    {
+      trigger: '"¿Cuánto se gana?"',
+      resp: '— RECONOCER: "Muy bien que lo preguntes — es la pregunta correcta."\n\n— ASOCIAR: "Los ingresos dependen completamente de lo que cada persona produce. Los resultados varían según el esfuerzo, el tiempo y la etapa. Tienes la información oficial de compensación en bit.ly/Primerica-earnings para que la revises con calma."\n\n— PREGUNTAR: "Lo que puedo mostrarte en 10 minutos es el modelo completo para que evalúes si tiene sentido para tu situación. ¿Hoy o mañana te queda mejor?"'
+    },
+    {
+      trigger: '"¿Por qué me llamas a mí?"',
+      resp: '— RECONOCER: "Buena pregunta, y lo aprecio."\n\n— ASOCIAR: "Te llamo porque cuando hablamos antes, me pareció que tienes el perfil exacto para esta fase de expansión — mentalidad, contactos y la capacidad de ver una oportunidad. No llamo a todo el mundo, llamo a las personas que creo que pueden aprovechar esto."\n\n— PREGUNTAR: "¿Me das 10 minutos para mostrarte en qué cambió el modelo? ¿Hoy o mañana te queda mejor?"'
+    }
+  ],
+  'agendamiento-pendiente': [
+    {
+      trigger: '"Te aviso cuando pueda"',
+      resp: '— RECONOCER: "Perfecto, no hay ningún apuro y lo entiendo completamente."\n\n— ASOCIAR: "Solo quería no perder el contacto — la última vez que hablamos quedé con la sensación de que esto podía ser útil para ti y quería asegurarme de que tuvieras la información."\n\n— PREGUNTAR: "¿Tienes idea de cuándo podría ser un buen momento esta semana o la próxima? Así marco en mi agenda y no te interrumpo en mal momento."'
+    },
+    {
+      trigger: '"He estado muy ocupado/a"',
+      resp: '— RECONOCER: "Lo entiendo perfectamente, los tiempos están muy exigentes."\n\n— ASOCIAR: "Por eso mismo no te quiero quitar tiempo por teléfono. Son solo 10 minutos bien organizados por Zoom y tú ves la información directamente, sin rodeos."\n\n— PREGUNTAR: "¿Cuándo crees que tengas un hueco, aunque sea pequeño? ¿Esta semana o la próxima?"'
+    },
+    {
+      trigger: '"¿Es necesario que venga mi pareja?"',
+      resp: '— RECONOCER: "No es obligatorio, puedes conectarte solo/a sin problema."\n\n— ASOCIAR: "Lo que pasa es que cuando la información afecta el plan de la casa, siempre es mejor que la vean los dos para tomar la decisión juntos con toda la información. Pero si no puede estar, avanzamos igual."\n\n— PREGUNTAR: "¿Tú puedes conectarte en los próximos días? Coordinamos lo que sea más cómodo para ti."'
+    },
+    {
+      trigger: '"No estoy seguro/a si esto es para mí"',
+      resp: '— RECONOCER: "Esa honestidad la valoro mucho."\n\n— ASOCIAR: "Precisamente para eso es la sesión de 10 minutos — no para que decidas de entrada, sino para que tengas la información y evalúes tú mismo si aplica o no. La mayoría de personas que dicen eso al principio terminan diciendo que les alegra haber visto los números."\n\n— PREGUNTAR: "¿Me das 10 minutos para que veas los números de tu caso específico y decides con información real? ¿Esta semana te queda?"'
+    }
+  ]
+};
 
 // ===== GOOGLE SHEETS INTEGRATION =====
 let WEBAPP_URL = localStorage.getItem('cc_webapp_url') || '';
@@ -1367,10 +1520,15 @@ function onProspectNameChange() {
 }
 
 // ===== OBJECTIONS =====
+function getActiveObjections() {
+  return (S.scriptKey && OBJECTIONS_MAP[S.scriptKey]) ? OBJECTIONS_MAP[S.scriptKey] : OBJECTIONS;
+}
+
 function renderObjPanel() {
+  const objs = getActiveObjections();
   const list = document.getElementById('objList');
   list.innerHTML = '';
-  OBJECTIONS.forEach((obj, i) => {
+  objs.forEach((obj, i) => {
     const wrap = document.createElement('div');
     wrap.className = 'obj-item';
     wrap.innerHTML = `
@@ -1382,10 +1540,11 @@ function renderObjPanel() {
 }
 
 function toggleObj(btn, i) {
+  const objs = getActiveObjections();
   const resp = document.getElementById('objr-'+i);
   const isOpen = resp.style.display === 'block';
   // Close all
-  OBJECTIONS.forEach((_, j) => {
+  objs.forEach((_, j) => {
     const r = document.getElementById('objr-'+j);
     if (r) r.style.display = 'none';
     const b = r ? r.previousElementSibling : null;
@@ -1398,9 +1557,10 @@ function toggleObj(btn, i) {
 }
 
 function renderSidebarObjs() {
+  const objs = getActiveObjections();
   const cont = document.getElementById('sidebarObjBtns');
   cont.innerHTML = '';
-  OBJECTIONS.forEach((obj, i) => {
+  objs.forEach((obj, i) => {
     const b = document.createElement('button');
     b.className = 'sidebar-obj-btn';
     b.textContent = obj.trigger.replace(/"/g,'').split(' / ')[0];
@@ -1410,7 +1570,7 @@ function renderSidebarObjs() {
         const r = document.getElementById('objr-'+i);
         if (r) {
           // Close all, open this one
-          OBJECTIONS.forEach((_,j) => { const el=document.getElementById('objr-'+j); if(el) el.style.display='none'; });
+          objs.forEach((_,j) => { const el=document.getElementById('objr-'+j); if(el) el.style.display='none'; });
           r.style.display = 'block';
           r.scrollIntoView({behavior:'smooth'});
         }
@@ -1446,8 +1606,69 @@ function startTimer() {
 function stopTimer() { if (S.timerInterval) { clearInterval(S.timerInterval); S.timerInterval = null; } }
 
 // ===== RESULT =====
+function renderResultGrid() {
+  const grid = document.getElementById('resultGrid');
+  if (!grid) return;
+  if (S.currentType === 'reactivacion-pres') {
+    grid.innerHTML = `
+      <div class="result-btn" style="border-color:var(--green);background:rgba(0,212,106,.08);" onclick="logResult('cita')">
+        <div class="result-emoji">✅</div><span class="result-label" style="color:var(--green);">Cita Agendada</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--border);background:rgba(148,163,184,.06);" onclick="logResult('no-contesto')">
+        <div class="result-emoji">📵</div><span class="result-label" style="color:var(--text-dim);">Sin Respuesta</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
+        <div class="result-emoji">🔄</div><span class="result-label" style="color:var(--blue);">Recontactar</span>
+      </div>
+      <div class="result-btn" style="border-color:#7c3aed;background:rgba(124,58,237,.08);" onclick="logResult('en-pausa')">
+        <div class="result-emoji">⏸</div><span class="result-label" style="color:#a78bfa;">En Pausa (Manual)</span>
+      </div>
+    `;
+  } else if (S.currentType === 'agendamiento-pendiente') {
+    grid.innerHTML = `
+      <div class="result-btn" style="border-color:var(--green);background:rgba(0,212,106,.08);" onclick="logResult('cita')">
+        <div class="result-emoji">✅</div><span class="result-label" style="color:var(--green);">Cita Agendada</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--yellow);background:rgba(251,191,36,.08);" onclick="logResult('aviso-pendiente')">
+        <div class="result-emoji">🗓</div><span class="result-label" style="color:var(--yellow);">Aviso Pendiente (sin fecha)</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
+        <div class="result-emoji">🔄</div><span class="result-label" style="color:var(--blue);">Recontactar Después</span>
+      </div>
+      <div class="result-btn" style="border-color:#7c3aed;background:rgba(124,58,237,.08);" onclick="logResult('en-pausa')">
+        <div class="result-emoji">⏸</div><span class="result-label" style="color:#a78bfa;">En Pausa (Manual)</span>
+      </div>
+    `;
+  } else {
+    grid.innerHTML = `
+      <div class="result-btn" style="border-color:var(--green);background:rgba(0,212,106,.08);" onclick="logResult('cita')">
+        <div class="result-emoji">✅</div><span class="result-label" style="color:var(--green);">Cita Agendada</span>
+      </div>
+      <div class="result-btn" style="border-color:#2d5a3d;background:rgba(0,212,106,.04);" onclick="logResult('objecion-cita')">
+        <div class="result-emoji">🔄</div><span class="result-label" style="color:#5ddb8a;">Objeción → Cita</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--border);background:rgba(148,163,184,.06);" onclick="logResult('no-contesto')">
+        <div class="result-emoji">📵</div><span class="result-label" style="color:var(--text-dim);">No Contestó</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
+        <div class="result-emoji">🕐</div><span class="result-label" style="color:var(--blue);">Llamar Después</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--red);background:rgba(255,71,87,.08);" onclick="logResult('no-interesado')">
+        <div class="result-emoji">🚫</div><span class="result-label" style="color:var(--red);">No Interesado</span>
+      </div>
+      <div class="result-btn" style="border-color:var(--yellow);background:rgba(251,191,36,.08);" onclick="logResult('mensaje-enviado')">
+        <div class="result-emoji">💬</div><span class="result-label" style="color:var(--yellow);">Mensaje Enviado</span>
+      </div>
+      <div class="result-btn" style="border-color:#444;background:rgba(100,100,100,.06);" onclick="logResult('invalido')">
+        <div class="result-emoji">❌</div><span class="result-label" style="color:var(--text-muted);">Número Inválido</span>
+      </div>
+    `;
+  }
+}
+
 function goToResult() {
   document.getElementById('result-name').textContent = document.getElementById('prospectName').value ? 'Prospecto: '+document.getElementById('prospectName').value : '';
+  renderResultGrid();
   showScreen('result');
 }
 
@@ -1537,6 +1758,25 @@ function updateWA() {
 `¡Listo, ${nombre}! Ya quedó separado nuestro espacio de 10 minutos para el ${fecha} a las ${hora}. ¡Un saludo!`;
   document.getElementById('waPreview2').textContent =
 `Hola, ${nombre}. Te habla Miguel Romero. Te escribo rápido para confirmar que ya tengo separado nuestro espacio de 10 minutos hoy a las ${hora}. Te comparto por aquí el link para conectarnos: ${zoom}. ¡Saludos!`;
+
+  // Bloque 3 — solo para campañas de Reactivación PRES (Pilar 3)
+  const isReactivacion = S.scriptKey && S.scriptKey.startsWith('reactivacion-');
+  const block3 = document.getElementById('wa-block3');
+  if (block3) block3.style.display = isReactivacion ? 'block' : 'none';
+  if (isReactivacion) {
+    const variantTag = S.scriptKey === 'reactivacion-b' ? 'oportunidad' : 'financiero';
+    const preview3 = document.getElementById('waPreview3');
+    if (preview3) preview3.textContent =
+`Hola ${nombre}, te saluda Miguel, de la Oficina de Consultoría Financiera y Expansión. Confirmo nuestro espacio para la actualización de tu diagnóstico ${variantTag}. 📅 ${fecha} ⏰ ${hora} ⏳ 20 minutos 💻 ${zoom}. Te pido cámara encendida y, si aplica, la asistencia de tu pareja en pantalla. Nos vemos en breve.`;
+  }
+}
+
+function copyWA3() {
+  navigator.clipboard.writeText(document.getElementById('waPreview3').textContent).then(() => {
+    const c = document.getElementById('copyConfirm3');
+    c.style.display = 'block';
+    setTimeout(() => c.style.display = 'none', 3000);
+  });
 }
 
 function copyWA1() {
@@ -1634,7 +1874,7 @@ updateWA();
 // Initialize sync status from stored URL
 setSyncStatus(WEBAPP_URL ? 'idle' : 'none');
 // Ensure confirm elements start hidden
-['buzonConfirm1','buzonConfirm2','copyConfirm1','copyConfirm2','config-saved','prospecto-added'].forEach(id => {
+['buzonConfirm1','buzonConfirm2','copyConfirm1','copyConfirm2','copyConfirm3','config-saved','prospecto-added'].forEach(id => {
   const el = document.getElementById(id); if (el) el.style.display = 'none';
 });
 </script>
