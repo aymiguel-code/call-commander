@@ -1394,13 +1394,10 @@ async function addProspectoManual() {
   const nombre = document.getElementById('new-nombre').value.trim();
   const tel    = document.getElementById('new-tel').value.trim();
   const tipo   = document.getElementById('new-tipo').value;
-  const ref    = document.getElementById('new-ref').value.trim();
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
   if (!WEBAPP_URL) { alert('Configura la URL del Web App primero (⚙️).'); return; }
   setSyncStatus('syncing');
   try {
-    // Usa action=addProspecto directamente — NO pasa por syncCall para evitar que
-    // se mezcle con action=logCall y el prospecto quede en Llamadas por error.
     const params = [
       'nombre='   + encodeURIComponent(nombre),
       'telefono=' + encodeURIComponent(tel),
@@ -1414,7 +1411,6 @@ async function addProspectoManual() {
   }
   document.getElementById('new-nombre').value = '';
   document.getElementById('new-tel').value    = '';
-  document.getElementById('new-ref').value    = '';
   const ok = document.getElementById('prospecto-added');
   ok.style.display = 'block';
   setTimeout(() => ok.style.display = 'none', 2500);
