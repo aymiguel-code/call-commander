@@ -825,10 +825,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
             <option value="frio-personal">🧊 Contacto Frío Personal</option>
           </select>
         </div>
-        <div class="form-group">
-          <label class="form-label">Referido por (opcional)</label>
-          <input type="text" class="form-input" id="new-ref" placeholder="Nombre del referidor">
-        </div>
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="addProspectoManual()">➕ Agregar y sincronizar a Sheets</button>
       <div class="copy-confirm" id="prospecto-added" style="display:none;">✅ ¡Prospecto agregado!</div>
@@ -1400,18 +1396,28 @@ async function addProspectoManual() {
   const tipo   = document.getElementById('new-tipo').value;
   const ref    = document.getElementById('new-ref').value.trim();
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
-  await syncCall({
-    action: 'addProspecto',
-    nombre, telefono: tel, tipo, referidoPor: ref
-  });
+  if (!WEBAPP_URL) { alert('Configura la URL del Web App primero (⚙️).'); return; }
+  setSyncStatus('syncing');
+  try {
+    // Usa action=addProspecto directamente — NO pasa por syncCall para evitar que
+    // se mezcle con action=logCall y el prospecto quede en Llamadas por error.
+    const params = [
+      'nombre='   + encodeURIComponent(nombre),
+      'telefono=' + encodeURIComponent(tel),
+      'tipo='     + encodeURIComponent(tipo)
+    ].join('&');
+    const j = await jsonpFetch(WEBAPP_URL + '?action=addProspecto&' + params);
+    setSyncStatus(j && j.success ? 'ok' : 'error');
+  } catch(e) {
+    setSyncStatus('error');
+    console.warn('[CC addProspecto] Error:', e.message);
+  }
   document.getElementById('new-nombre').value = '';
   document.getElementById('new-tel').value    = '';
   document.getElementById('new-ref').value    = '';
   const ok = document.getElementById('prospecto-added');
   ok.style.display = 'block';
   setTimeout(() => ok.style.display = 'none', 2500);
-  // Reload list from Sheets after short delay
-  setTimeout(() => loadProspectosFromSheets(), 1800);
 }
 
 // ===== STATE =====
