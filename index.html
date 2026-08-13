@@ -329,6 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
       <button class="btn btn-primary btn-lg" onclick="showScreen('type-selector')">📞 INICIAR SESIÓN DE LLAMADAS</button>
       <button class="btn btn-secondary btn-lg" onclick="showScreen('diagnostic')">📊 DIAGNÓSTICO SEMANAL</button>
+      <button class="btn btn-lg" style="background:rgba(18,140,126,.15);border:1px solid #128C7E;color:#25d366;" onclick="openWADirect()">💬 MENSAJE DE CITA</button>
     </div>
     <div class="card" style="max-width:680px;width:100%;">
       <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">META MENSUAL</div>
@@ -594,6 +595,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
     <div class="wa-actions">
       <button class="btn btn-secondary" onclick="nextCall()">Siguiente llamada →</button>
+      <button class="btn" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);" onclick="showScreen('home')">← Inicio</button>
     </div>
   </div>
 </div>
@@ -1751,15 +1753,32 @@ function updateSidebarStats() {
 }
 
 // ===== WHATSAPP =====
+function openWADirect() {
+  // Acceso directo desde home — limpia los campos para que el usuario llene manualmente
+  document.getElementById('wa-nombre').value = '';
+  document.getElementById('wa-hora').value   = '';
+  document.getElementById('wa-zoom').value   = '';
+  // Pre-llena la fecha de hoy
+  const now = new Date();
+  const days   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('wa-fecha').value = `${days[now.getDay()]} ${now.getDate()} de ${months[now.getMonth()]}`;
+  // Ocultar bloque 3 (reactivación — solo aplica dentro del flujo de llamada)
+  document.getElementById('wa-block3').style.display = 'none';
+  S._pendingCita = null; // No hay llamada pendiente de sincronizar
+  updateWA();
+  showScreen('whatsapp');
+}
+
 function updateWA() {
   const nombre = document.getElementById('wa-nombre').value || '[NOMBRE]';
   const fecha  = document.getElementById('wa-fecha').value || '[DÍA Y FECHA]';
   const hora   = document.getElementById('wa-hora').value || '[HORA]';
   const zoom   = document.getElementById('wa-zoom').value || '[LINK DE ZOOM]';
   document.getElementById('waPreview1').textContent =
-`¡Listo, ${nombre}! Ya quedó separado nuestro espacio de 10 minutos para el ${fecha} a las ${hora}. ¡Un saludo!`;
+`Hola, ${nombre}. Te habla Miguel Romero. Listo, ya quedó separado nuestro espacio de 10 minutos para el ${fecha} a las ${hora}. ¡Un saludo!`;
   document.getElementById('waPreview2').textContent =
-`Hola, ${nombre}. Te habla Miguel Romero. Te escribo rápido para confirmar que ya tengo separado nuestro espacio de 10 minutos hoy a las ${hora}. Te comparto por aquí el link para conectarnos: ${zoom}. ¡Saludos!`;
+`Hola, ${nombre}. Te habla Miguel Romero. Te escribo rápido para confirmar que ya tengo separado nuestro espacio hoy a las ${hora}. Te comparto por aquí el link para conectarnos: ${zoom}. ¡Saludos!`;
 
   // Bloque 3 — solo para campañas de Reactivación PRES (Pilar 3)
   const isReactivacion = S.scriptKey && S.scriptKey.startsWith('reactivacion-');
