@@ -556,7 +556,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         </div>
         <div class="form-group">
           <label class="form-label">Día y Fecha</label>
-          <input type="text" class="form-input" id="wa-fecha" placeholder="Ej: Martes 18 de Junio" oninput="updateWA()">
+          <input type="date" class="form-input" id="wa-fecha-picker" onchange="onWAFechaChange()" style="cursor:pointer;">
+          <div id="wa-fecha-label" style="font-size:12px;color:var(--green);margin-top:4px;"></div>
         </div>
       </div>
       <div class="form-row">
@@ -1792,10 +1793,7 @@ function logResult(type) {
     updateNavStats(); updateSidebarStats();
     const name = _nombre;
     document.getElementById('wa-nombre').value = name;
-    const now = new Date();
-    const days=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    document.getElementById('wa-fecha').value = `${days[now.getDay()]} ${now.getDate()} de ${months[now.getMonth()]}`;
+    setWAFechaHoy(new Date());
     document.getElementById('wa-hora').value = '';
     document.getElementById('wa-zoom').value = '';
     // Store for final sync when user finishes the WA screen
@@ -1975,26 +1973,46 @@ function copyNSCWA() {
 }
 
 // ===== WHATSAPP =====
+function fechaPickerToEspanol(val) {
+  // val = "2026-08-18" → "Martes 18 de Agosto"
+  if (!val) return '';
+  const [y, m, d] = val.split('-').map(Number);
+  const days   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const fecha = new Date(y, m - 1, d);
+  return `${days[fecha.getDay()]} ${d} de ${months[m - 1]}`;
+}
+
+function onWAFechaChange() {
+  const val = document.getElementById('wa-fecha-picker').value;
+  const label = fechaPickerToEspanol(val);
+  document.getElementById('wa-fecha-label').textContent = label ? `📅 ${label}` : '';
+  updateWA();
+}
+
+function setWAFechaHoy(fecha) {
+  // fecha = Date object
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  document.getElementById('wa-fecha-picker').value = `${y}-${m}-${d}`;
+  onWAFechaChange();
+}
+
 function openWADirect() {
-  // Acceso directo desde home — limpia los campos para que el usuario llene manualmente
   document.getElementById('wa-nombre').value = '';
   document.getElementById('wa-hora').value   = '';
   document.getElementById('wa-zoom').value   = '';
-  // Pre-llena la fecha de hoy
-  const now = new Date();
-  const days   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  document.getElementById('wa-fecha').value = `${days[now.getDay()]} ${now.getDate()} de ${months[now.getMonth()]}`;
-  // Ocultar bloque 3 (reactivación — solo aplica dentro del flujo de llamada)
+  setWAFechaHoy(new Date());
   document.getElementById('wa-block3').style.display = 'none';
-  S._pendingCita = null; // No hay llamada pendiente de sincronizar
+  S._pendingCita = null;
   updateWA();
   showScreen('whatsapp');
 }
 
 function updateWA() {
   const nombre = firstName(document.getElementById('wa-nombre').value) || '[NOMBRE]';
-  const fecha  = document.getElementById('wa-fecha').value || '[DÍA Y FECHA]';
+  const fecha  = fechaPickerToEspanol(document.getElementById('wa-fecha-picker').value) || '[DÍA Y FECHA]';
   const hora   = document.getElementById('wa-hora').value || '[HORA]';
   const zoom   = document.getElementById('wa-zoom').value || '[LINK DE ZOOM]';
   document.getElementById('waPreview1').textContent =
@@ -2088,7 +2106,7 @@ function nextCall() {
     tipo: p.tipo || '',
     estado: 'cita-agendada',
     guion: p.guion || '',
-    fechaCita: document.getElementById('wa-fecha').value || '',
+    fechaCita: fechaPickerToEspanol(document.getElementById('wa-fecha-picker').value) || '',
     horaCita:  document.getElementById('wa-hora').value  || '',
     linkZoom:  document.getElementById('wa-zoom').value  || ''
   });
