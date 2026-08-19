@@ -330,6 +330,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="btn btn-primary btn-lg" onclick="showScreen('type-selector')">📞 INICIAR SESIÓN DE LLAMADAS</button>
       <button class="btn btn-secondary btn-lg" onclick="showScreen('diagnostic')">📊 DIAGNÓSTICO SEMANAL</button>
       <button class="btn btn-lg" style="background:rgba(18,140,126,.15);border:1px solid #128C7E;color:#25d366;" onclick="openWADirect()">💬 MENSAJE DE CITA</button>
+      <button class="btn btn-lg" style="background:rgba(245,158,11,.12);border:1px solid #f59e0b;color:#f59e0b;" onclick="showScreen('no-se-conecto-direct')">📵 NO SE CONECTÓ</button>
     </div>
     <div class="card" style="max-width:680px;width:100%;">
       <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">META MENSUAL</div>
@@ -494,6 +495,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
       <div class="result-emoji">🕐</div><span class="result-label" style="color:var(--blue);">Llamar Después</span>
     </div>
+    <div class="result-btn" style="border-color:#f59e0b;background:rgba(245,158,11,.08);" onclick="logResult('no-se-conecto')">
+      <div class="result-emoji">📵</div><span class="result-label" style="color:#f59e0b;">No se Conectó</span>
+    </div>
     <div class="result-btn" style="border-color:var(--red);background:rgba(255,71,87,.08);" onclick="logResult('no-interesado')">
       <div class="result-emoji">🚫</div><span class="result-label" style="color:var(--red);">No Interesado</span>
     </div>
@@ -504,6 +508,19 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="result-emoji">❌</div><span class="result-label" style="color:var(--text-muted);">Número Inválido</span>
     </div>
   </div>
+  <!-- No se conectó panel -->
+  <div id="no-se-conecto-panel" style="display:none;max-width:560px;margin:16px auto 0;padding:0 24px;">
+    <div class="card" style="border-color:#f59e0b44;background:rgba(245,158,11,.06);">
+      <div style="font-size:12px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">📵 NO SE CONECTÓ — GUION DE REAGENDAMIENTO</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Si contestas por teléfono:</div>
+      <div id="nsc-guion-tel" style="background:var(--surface2);border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:14px;"></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Si no contesta — WhatsApp:</div>
+      <div id="nsc-guion-wa" style="background:#075e5422;border:1px solid #128C7E44;border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:16px;"></div>
+      <div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-bottom:14px;">Máximo 2 intentos de reagendamiento. Si falla dos veces → pasa al flujo de Reactivación PRES.</div>
+      <button class="btn btn-primary" onclick="closeNoSeConectoPanel()">✓ Registrar y continuar →</button>
+    </div>
+  </div>
+
   <!-- Callback form -->
   <div id="callbackForm" style="display:none;max-width:420px;margin:0 auto;padding:0 24px;">
     <div class="card">
@@ -596,6 +613,37 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="wa-actions">
       <button class="btn btn-secondary" onclick="nextCall()">Siguiente llamada →</button>
       <button class="btn" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);" onclick="showScreen('home')">← Inicio</button>
+    </div>
+  </div>
+</div>
+
+<!-- NO SE CONECTÓ — ACCESO DIRECTO -->
+<div class="screen" id="screen-no-se-conecto-direct">
+  <div class="page-header">
+    <button class="btn btn-sm btn-secondary" onclick="showScreen('home')" style="margin-bottom:14px;">← Inicio</button>
+    <h2>📵 NO SE CONECTÓ A LA CITA</h2>
+    <p>Escribe el nombre — los guiones se generan automáticamente</p>
+  </div>
+  <div style="max-width:560px;margin:0 auto;padding:24px;">
+    <div class="form-group" style="margin-bottom:20px;">
+      <label class="form-label">Nombre del prospecto</label>
+      <input type="text" class="form-input" id="nsc-direct-nombre" placeholder="Ej: Carlos" oninput="updateNSCDirect()" style="width:100%;box-sizing:border-box;">
+    </div>
+    <div class="card" style="border-color:#f59e0b44;background:rgba(245,158,11,.06);">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Si contestas por teléfono:</div>
+      <div id="nsc-direct-tel" style="background:var(--surface2);border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:14px;"></div>
+      <button class="btn btn-sm btn-secondary" style="margin-bottom:18px;" onclick="copyNSCTel()">📋 Copiar</button>
+      <div class="copy-confirm" id="nsc-copy-tel">✅ ¡Copiado!</div>
+
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Si no contesta — WhatsApp:</div>
+      <div id="nsc-direct-wa" style="background:#075e5422;border:1px solid #128C7E44;border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:14px;"></div>
+      <button class="btn btn-sm btn-secondary" onclick="copyNSCWA()">📋 Copiar</button>
+      <div class="copy-confirm" id="nsc-copy-wa">✅ ¡Copiado!</div>
+
+      <div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:16px;">Máximo 2 intentos de reagendamiento. Si falla dos veces → Reactivación PRES.</div>
+    </div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-secondary" onclick="showScreen('home')">← Volver al inicio</button>
     </div>
   </div>
 </div>
@@ -830,6 +878,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="addProspectoManual()">➕ Agregar y sincronizar a Sheets</button>
       <div class="copy-confirm" id="prospecto-added" style="display:none;">✅ ¡Prospecto agregado!</div>
+    </div>
+
+    <!-- Search -->
+    <div id="prospectos-search-wrap" style="display:none;">
+      <input type="text" id="prospectos-search" class="form-input" placeholder="🔍 Buscar por nombre o teléfono…" oninput="filterProspectos(this.value)" style="width:100%;box-sizing:border-box;">
     </div>
 
     <!-- Prospectos list -->
@@ -1326,7 +1379,26 @@ async function loadProspectosFromSheets() {
   }
 }
 
-function renderProspectosList(prospectos) {
+// Cache global para filtrado
+let _allProspectos = [];
+
+function filterProspectos(query) {
+  const q = query.toLowerCase().trim();
+  const filtered = q ? _allProspectos.filter(p => {
+    const nombre = (p.Nombre || p.nombre || '').toLowerCase();
+    const tel    = (p.Teléfono || p.telefono || '').toLowerCase();
+    return nombre.includes(q) || tel.includes(q);
+  }) : _allProspectos;
+  renderProspectosList(filtered, false);
+}
+
+function renderProspectosList(prospectos, saveCache = true) {
+  if (saveCache) {
+    _allProspectos = prospectos;
+    const wrap = document.getElementById('prospectos-search-wrap');
+    if (wrap) wrap.style.display = prospectos.length ? 'block' : 'none';
+    document.getElementById('prospectos-search').value = '';
+  }
   const cont = document.getElementById('prospectos-list');
   cont.innerHTML = '';
   if (!prospectos.length) {
@@ -1432,6 +1504,10 @@ function showScreen(id) {
   document.getElementById('screen-'+id).classList.add('active');
   if (id === 'call') startTimer(); else stopTimer();
   if (id !== 'result') document.getElementById('callbackForm').style.display = 'none';
+  if (id === 'no-se-conecto-direct') {
+    document.getElementById('nsc-direct-nombre').value = '';
+    updateNSCDirect();
+  }
 }
 
 // ===== TYPE SELECTION =====
@@ -1474,11 +1550,11 @@ function loadScript(key) {
   const sc = SCRIPTS[key];
   document.getElementById('call-script-tag').textContent = sc.name;
   document.getElementById('call-type-tag').textContent = sc.type;
-  renderStepsNav(); renderStep();
-  renderObjPanel(); renderSidebarObjs();
-  // Pre-fill from prospecto card if available, otherwise clear
+  // Pre-fill BEFORE renderStep so [NOMBRE] gets replaced correctly
   document.getElementById('prospectName').value = S.pendingName || '';
   document.getElementById('prospectPhone').value = S.pendingPhone || '';
+  renderStepsNav(); renderStep();
+  renderObjPanel(); renderSidebarObjs();
   document.getElementById('result-name').textContent = '';
   S.pendingName = null; S.pendingPhone = null;
   S.session.calls++;
@@ -1613,6 +1689,11 @@ function stopTimer() { if (S.timerInterval) { clearInterval(S.timerInterval); S.
 function renderResultGrid() {
   const grid = document.getElementById('resultGrid');
   if (!grid) return;
+  const btnNoSeConecto = `
+      <div class="result-btn" style="border-color:#f59e0b;background:rgba(245,158,11,.08);" onclick="logResult('no-se-conecto')">
+        <div class="result-emoji">📵</div><span class="result-label" style="color:#f59e0b;">No se Conectó</span>
+      </div>`;
+
   if (S.currentType === 'reactivacion-pres') {
     grid.innerHTML = `
       <div class="result-btn" style="border-color:var(--green);background:rgba(0,212,106,.08);" onclick="logResult('cita')">
@@ -1624,6 +1705,7 @@ function renderResultGrid() {
       <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
         <div class="result-emoji">🔄</div><span class="result-label" style="color:var(--blue);">Recontactar</span>
       </div>
+      ${btnNoSeConecto}
       <div class="result-btn" style="border-color:#7c3aed;background:rgba(124,58,237,.08);" onclick="logResult('en-pausa')">
         <div class="result-emoji">⏸</div><span class="result-label" style="color:#a78bfa;">En Pausa (Manual)</span>
       </div>
@@ -1639,6 +1721,7 @@ function renderResultGrid() {
       <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
         <div class="result-emoji">🔄</div><span class="result-label" style="color:var(--blue);">Recontactar Después</span>
       </div>
+      ${btnNoSeConecto}
       <div class="result-btn" style="border-color:#7c3aed;background:rgba(124,58,237,.08);" onclick="logResult('en-pausa')">
         <div class="result-emoji">⏸</div><span class="result-label" style="color:#a78bfa;">En Pausa (Manual)</span>
       </div>
@@ -1657,6 +1740,7 @@ function renderResultGrid() {
       <div class="result-btn" style="border-color:var(--blue);background:rgba(59,130,246,.08);" onclick="logResult('llamar-despues')">
         <div class="result-emoji">🕐</div><span class="result-label" style="color:var(--blue);">Llamar Después</span>
       </div>
+      ${btnNoSeConecto}
       <div class="result-btn" style="border-color:var(--red);background:rgba(255,71,87,.08);" onclick="logResult('no-interesado')">
         <div class="result-emoji">🚫</div><span class="result-label" style="color:var(--red);">No Interesado</span>
       </div>
@@ -1715,8 +1799,34 @@ function logResult(type) {
   });
   if (type === 'no-interesado') S.session.noInt++;
   else if (type === 'no-contesto') S.session.noContest++;
+  else if (type === 'no-se-conecto') {
+    // Muestra guion de reagendamiento antes de continuar
+    showNoSeConectoPanel(_nombre);
+    return;
+  }
   updateNavStats(); updateSidebarStats();
   setTimeout(() => showScreen('type-selector'), 600);
+}
+
+function showNoSeConectoPanel(nombre) {
+  const name = firstName(nombre || document.getElementById('prospectName').value) || '[NOMBRE]';
+  const panel = document.getElementById('no-se-conecto-panel');
+  document.getElementById('nsc-guion-tel').textContent =
+    `"Hola ${name}, te habla Miguel Romero. Oye, hoy tuvimos separado nuestro espacio y no nos pudimos conectar — imagino que algo se te presentó. No hay problema. ¿Tienes un minuto ahorita?\n\n[Espera respuesta]\n\nPerfecto. ¿Cuándo tienes disponible esta semana para que nos conectemos — el [DÍA 1] o el [DÍA 2]?"`;
+  document.getElementById('nsc-guion-wa').textContent =
+    `"Hola ${name}, te habla Miguel Romero. Hoy tuvimos separado nuestro espacio y no nos pudimos conectar. No hay problema, pasa. ¿Cuándo tienes 20 minutos esta semana para reagendar? Dime y lo separamos."`;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeNoSeConectoPanel() {
+  document.getElementById('no-se-conecto-panel').style.display = 'none';
+  const _nombre = document.getElementById('prospectName').value || '';
+  const _tel    = document.getElementById('prospectPhone').value || '';
+  const _guion  = S.scriptKey && SCRIPTS[S.scriptKey] ? SCRIPTS[S.scriptKey].name : '';
+  syncCall({ action:'logCall', nombre:_nombre, telefono:_tel, tipo: S.currentType||'', estado:'no-se-conecto', guion:_guion });
+  updateNavStats(); updateSidebarStats();
+  showScreen('type-selector');
 }
 
 function confirmCallback() {
@@ -1752,6 +1862,33 @@ function updateSidebarStats() {
   document.getElementById('sess-nc').textContent = S.session.noContest;
 }
 
+// ===== UTILIDAD — solo primer nombre =====
+function firstName(full) {
+  return (full || '').trim().split(/\s+/)[0] || full || '';
+}
+
+// ===== NO SE CONECTÓ — PANTALLA DIRECTA =====
+function updateNSCDirect() {
+  const nombre = firstName(document.getElementById('nsc-direct-nombre').value) || '[NOMBRE]';
+  document.getElementById('nsc-direct-tel').textContent =
+    `"Hola ${nombre}, te habla Miguel Romero. Oye, hoy tuvimos separado nuestro espacio y no nos pudimos conectar — imagino que algo se te presentó. No hay problema. ¿Tienes un minuto ahorita?\n\n[Espera respuesta]\n\nPerfecto. ¿Cuándo tienes disponible esta semana para que nos conectemos — el [DÍA 1] o el [DÍA 2]?"`;
+  document.getElementById('nsc-direct-wa').textContent =
+    `"Hola ${nombre}, te habla Miguel Romero. Hoy tuvimos separado nuestro espacio y no nos pudimos conectar. No hay problema, pasa. ¿Cuándo tienes 20 minutos esta semana para reagendar? Dime y lo separamos."`;
+}
+
+function copyNSCTel() {
+  navigator.clipboard.writeText(document.getElementById('nsc-direct-tel').textContent).then(() => {
+    const c = document.getElementById('nsc-copy-tel');
+    c.style.display = 'block'; setTimeout(() => c.style.display = 'none', 2500);
+  });
+}
+function copyNSCWA() {
+  navigator.clipboard.writeText(document.getElementById('nsc-direct-wa').textContent).then(() => {
+    const c = document.getElementById('nsc-copy-wa');
+    c.style.display = 'block'; setTimeout(() => c.style.display = 'none', 2500);
+  });
+}
+
 // ===== WHATSAPP =====
 function openWADirect() {
   // Acceso directo desde home — limpia los campos para que el usuario llene manualmente
@@ -1771,7 +1908,7 @@ function openWADirect() {
 }
 
 function updateWA() {
-  const nombre = document.getElementById('wa-nombre').value || '[NOMBRE]';
+  const nombre = firstName(document.getElementById('wa-nombre').value) || '[NOMBRE]';
   const fecha  = document.getElementById('wa-fecha').value || '[DÍA Y FECHA]';
   const hora   = document.getElementById('wa-hora').value || '[HORA]';
   const zoom   = document.getElementById('wa-zoom').value || '[LINK DE ZOOM]';
