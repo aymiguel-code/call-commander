@@ -622,29 +622,42 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="page-header">
     <button class="btn btn-sm btn-secondary" onclick="showScreen('home')" style="margin-bottom:14px;">← Inicio</button>
     <h2>📵 NO SE CONECTÓ A LA CITA</h2>
-    <p>Escribe el nombre — los guiones se generan automáticamente</p>
+    <p>Busca el contacto — los guiones y el CRM se actualizan automáticamente</p>
   </div>
   <div style="max-width:560px;margin:0 auto;padding:24px;">
-    <div class="form-group" style="margin-bottom:20px;">
-      <label class="form-label">Nombre del prospecto</label>
-      <input type="text" class="form-input" id="nsc-direct-nombre" placeholder="Ej: Carlos" oninput="updateNSCDirect()" style="width:100%;box-sizing:border-box;">
+
+    <!-- Buscador de prospecto -->
+    <div class="form-group" style="margin-bottom:6px;position:relative;">
+      <label class="form-label">Buscar prospecto en tu lista</label>
+      <input type="text" class="form-input" id="nsc-search" placeholder="Escribe el nombre…" oninput="nscSearch(this.value)" autocomplete="off" style="width:100%;box-sizing:border-box;">
+      <div id="nsc-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px;z-index:99;max-height:200px;overflow-y:auto;margin-top:4px;"></div>
     </div>
+    <div id="nsc-selected-tag" style="display:none;margin-bottom:16px;font-size:12px;color:#f59e0b;padding:6px 10px;background:rgba(245,158,11,.1);border-radius:6px;border:1px solid #f59e0b44;"></div>
+    <div id="nsc-no-list-hint" style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">
+      ¿No ves la lista? <button class="btn btn-sm btn-secondary" style="padding:3px 10px;font-size:11px;" onclick="nscLoadSheets()">🔄 Cargar desde Sheets</button>
+    </div>
+
+    <!-- Guiones -->
     <div class="card" style="border-color:#f59e0b44;background:rgba(245,158,11,.06);">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Si contestas por teléfono:</div>
-      <div id="nsc-direct-tel" style="background:var(--surface2);border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:14px;"></div>
+      <div id="nsc-direct-tel" style="background:var(--surface2);border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:10px;"></div>
       <button class="btn btn-sm btn-secondary" style="margin-bottom:18px;" onclick="copyNSCTel()">📋 Copiar</button>
       <div class="copy-confirm" id="nsc-copy-tel">✅ ¡Copiado!</div>
 
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Si no contesta — WhatsApp:</div>
-      <div id="nsc-direct-wa" style="background:#075e5422;border:1px solid #128C7E44;border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:14px;"></div>
+      <div id="nsc-direct-wa" style="background:#075e5422;border:1px solid #128C7E44;border-radius:8px;padding:14px;font-size:13px;line-height:1.8;color:var(--text-main);white-space:pre-wrap;margin-bottom:10px;"></div>
       <button class="btn btn-sm btn-secondary" onclick="copyNSCWA()">📋 Copiar</button>
       <div class="copy-confirm" id="nsc-copy-wa">✅ ¡Copiado!</div>
 
-      <div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:16px;">Máximo 2 intentos de reagendamiento. Si falla dos veces → Reactivación PRES.</div>
+      <div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:16px;">Máximo 2 intentos. Si falla dos veces → Reactivación PRES.</div>
     </div>
-    <div style="margin-top:16px;">
+
+    <!-- Botón CRM -->
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="nsc-crm-btn" onclick="nscRegistrarCRM()" style="display:none;">✓ Registrar "No se Conectó" en CRM</button>
       <button class="btn btn-secondary" onclick="showScreen('home')">← Volver al inicio</button>
     </div>
+    <div class="copy-confirm" id="nsc-crm-confirm" style="margin-top:10px;">✅ ¡Registrado en CRM!</div>
   </div>
 </div>
 
@@ -1505,8 +1518,17 @@ function showScreen(id) {
   if (id === 'call') startTimer(); else stopTimer();
   if (id !== 'result') document.getElementById('callbackForm').style.display = 'none';
   if (id === 'no-se-conecto-direct') {
-    document.getElementById('nsc-direct-nombre').value = '';
-    updateNSCDirect();
+    _nscProspecto = null;
+    document.getElementById('nsc-search').value = '';
+    document.getElementById('nsc-search-results').style.display = 'none';
+    document.getElementById('nsc-selected-tag').style.display = 'none';
+    document.getElementById('nsc-crm-btn').style.display = 'none';
+    document.getElementById('nsc-crm-confirm').style.display = 'none';
+    document.getElementById('nsc-no-list-hint').innerHTML =
+      _allProspectos.length
+        ? `<span style="color:var(--green);font-size:11px;">✓ ${_allProspectos.length} contactos disponibles</span>`
+        : `¿No ves la lista? <button class="btn btn-sm btn-secondary" style="padding:3px 10px;font-size:11px;" onclick="nscLoadSheets()">🔄 Cargar desde Sheets</button>`;
+    updateNSCDirect('');
   }
 }
 
@@ -1868,12 +1890,75 @@ function firstName(full) {
 }
 
 // ===== NO SE CONECTÓ — PANTALLA DIRECTA =====
-function updateNSCDirect() {
-  const nombre = firstName(document.getElementById('nsc-direct-nombre').value) || '[NOMBRE]';
+let _nscProspecto = null; // contacto seleccionado { nombre, telefono }
+
+function updateNSCDirect(nombreCompleto) {
+  const nombre = firstName(nombreCompleto || '') || '[NOMBRE]';
   document.getElementById('nsc-direct-tel').textContent =
     `"Hola ${nombre}, te habla Miguel Romero. Oye, hoy tuvimos separado nuestro espacio y no nos pudimos conectar — imagino que algo se te presentó. No hay problema. ¿Tienes un minuto ahorita?\n\n[Espera respuesta]\n\nPerfecto. ¿Cuándo tienes disponible esta semana para que nos conectemos — el [DÍA 1] o el [DÍA 2]?"`;
   document.getElementById('nsc-direct-wa').textContent =
     `"Hola ${nombre}, te habla Miguel Romero. Hoy tuvimos separado nuestro espacio y no nos pudimos conectar. No hay problema, pasa. ¿Cuándo tienes 20 minutos esta semana para reagendar? Dime y lo separamos."`;
+}
+
+function nscSearch(query) {
+  const res = document.getElementById('nsc-search-results');
+  if (!query.trim() || !_allProspectos.length) { res.style.display = 'none'; return; }
+  const q = query.toLowerCase();
+  const matches = _allProspectos.filter(p => {
+    const n = (p.Nombre || p.nombre || '').toLowerCase();
+    return n.includes(q);
+  }).slice(0, 8);
+  if (!matches.length) { res.style.display = 'none'; return; }
+  res.innerHTML = matches.map(p => {
+    const nombre = p.Nombre || p.nombre || '';
+    const tel    = p.Teléfono || p.telefono || '';
+    return `<div style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
+      onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''"
+      onclick="nscSelectProspecto('${nombre.replace(/'/g,"\\'")}','${tel.replace(/'/g,"\\'")}')">
+      <strong>${nombre}</strong>${tel ? ` · <span style="color:var(--text-muted)">${tel}</span>` : ''}
+    </div>`;
+  }).join('');
+  res.style.display = 'block';
+}
+
+function nscSelectProspecto(nombre, tel) {
+  _nscProspecto = { nombre, telefono: tel };
+  document.getElementById('nsc-search').value = nombre;
+  document.getElementById('nsc-search-results').style.display = 'none';
+  const tag = document.getElementById('nsc-selected-tag');
+  tag.textContent = `✓ Seleccionado: ${nombre}${tel ? '  ·  ' + tel : ''}`;
+  tag.style.display = 'block';
+  document.getElementById('nsc-crm-btn').style.display = 'inline-block';
+  updateNSCDirect(nombre);
+}
+
+async function nscLoadSheets() {
+  document.getElementById('nsc-no-list-hint').innerHTML = '<span style="color:var(--text-muted);font-size:11px;">Cargando…</span>';
+  await loadProspectosFromSheets();
+  document.getElementById('nsc-no-list-hint').innerHTML =
+    _allProspectos.length
+      ? `<span style="color:var(--green);font-size:11px;">✓ ${_allProspectos.length} contactos cargados — ya puedes buscar</span>`
+      : `<span style="color:var(--red);font-size:11px;">No se encontraron contactos en Sheets</span>`;
+}
+
+async function nscRegistrarCRM() {
+  if (!_nscProspecto) return;
+  if (!WEBAPP_URL) { alert('Configura la URL del Web App primero (⚙️).'); return; }
+  const params = [
+    'nombre='   + encodeURIComponent(_nscProspecto.nombre),
+    'telefono=' + encodeURIComponent(_nscProspecto.telefono || ''),
+    'tipo='     + encodeURIComponent(''),
+    'estado='   + encodeURIComponent('no-se-conecto'),
+    'guion='    + encodeURIComponent('Acceso directo')
+  ].join('&');
+  try {
+    await jsonpFetch(WEBAPP_URL + '?action=logCall&' + params);
+    const c = document.getElementById('nsc-crm-confirm');
+    c.style.display = 'block';
+    setTimeout(() => c.style.display = 'none', 3000);
+  } catch(e) {
+    alert('Error al sincronizar. Verifica la URL del Web App.');
+  }
 }
 
 function copyNSCTel() {
